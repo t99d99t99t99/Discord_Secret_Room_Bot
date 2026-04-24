@@ -26,12 +26,35 @@ def _week_of_month(date: datetime.date) -> int:
 class KyohoonManagement(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self._synced = False
         with open('assets/message.yaml', encoding='utf-8') as f:
             self._msgs = yaml.safe_load(f)['kyohoon']
         self.update_Kyohoon.start()
 
     def cog_unload(self):
         self.update_Kyohoon.cancel()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if self._synced:
+            return
+        self._synced = True
+
+        submission_ch = self.bot.get_channel(int(os.getenv("KYOHOON_SUBMISSION_ID")))
+        if submission_ch is None:
+            return
+        latest_thread = await _get_latest_thread(submission_ch)
+        if latest_thread is None:
+            return
+
+        async for msg in latest_thread.history(limit=None, oldest_first=True):
+            if msg.author.bot:
+                continue
+            await self.bot.db.execute(
+                "INSERT INTO kyohoon_submissions(thread_id, user_id, message_id) "
+                "VALUES($1, $2, $3) ON CONFLICT DO NOTHING",
+                latest_thread.id, msg.author.id, msg.id
+            )
 
     # ------------------------------------------------------------------ #
     # 교훈 등록 (매주 일요일 22:30 KST)

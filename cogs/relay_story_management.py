@@ -6,35 +6,32 @@ import yaml
 class RelayStoryManagement(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self._last_author_id = None
 
         with open('assets/message.yaml', encoding='utf-8') as f:
             messages = yaml.safe_load(f)
         self._warn_too_long = messages['relay_story']['too_long']
         self._warn_consecutive = messages['relay_story']['consecutive']
 
-    async def cog_load(self):
-        row = await self.bot.db.fetchrow(
-            "SELECT value FROM relay_story WHERE key = 'last_author_id'"
-        )
-        self._last_author_id = int(row['value']) if row else None
-
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author == self.bot.user:
+        if message.author.bot:
             return
 
         if message.channel.id != int(os.getenv("RELAY_STORY_ID")):
             return
 
         content = message.content
-        author_id = message.author.id
         warn_template = None
 
         if len(content) > 200:
             warn_template = self._warn_too_long
-        elif self._last_author_id == author_id:
-            warn_template = self._warn_consecutive
+        else:
+            # 채널 히스토리에서 직전 비봇 메시지 작성자와 동일인인지 확인
+            async for prev in message.channel.history(limit=10, before=message):
+                if not prev.author.bot:
+                    if prev.author.id == message.author.id:
+                        warn_template = self._warn_consecutive
+                    break
 
         if warn_template:
             await message.delete()
@@ -47,13 +44,6 @@ class RelayStoryManagement(commands.Cog):
             await log_thread.send(
                 f"[이야기잇기 규칙 위반] {message.author.mention}의 메시지가 삭제되었습니다. (사유: {reason})"
             )
-        else:
-            await self.bot.db.execute(
-                "INSERT INTO relay_story(key, value) VALUES('last_author_id', $1) "
-                "ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value",
-                str(author_id)
-            )
-            self._last_author_id = author_id
 
 async def setup(bot):
     await bot.add_cog(RelayStoryManagement(bot))
