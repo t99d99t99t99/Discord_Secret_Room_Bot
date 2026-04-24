@@ -6,7 +6,7 @@ class General(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @tasks.loop(time = datetime.time(22, 30, tzinfo = datetime.timedelta(hours = 9)))
+    @tasks.loop(time = datetime.time(22, 30, tzinfo = datetime.timezone(datetime.timedelta(hours=9))))
     async def update_Kyohoon(self):
         '''
         오늘의 교훈을 업데이트합니다
