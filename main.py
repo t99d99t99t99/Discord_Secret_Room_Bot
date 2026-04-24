@@ -15,6 +15,7 @@ async def main():
 
     
     await bot.load_extension('cogs.general')
+    await bot.load_extension('cogs.relay_story_management')
 
     async with bot:
         await bot.start(token)
