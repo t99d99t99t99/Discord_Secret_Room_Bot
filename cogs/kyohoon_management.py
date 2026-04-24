@@ -1,5 +1,4 @@
 import os
-import re
 import discord
 from discord.ext import commands, tasks
 import datetime
@@ -7,59 +6,12 @@ import yaml
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
-# 관리 메시지 항목 형식:
-# - <@user_id> (✅ 게시됨 2024-04-14T22:30:00+09:00) [mid:message_id]
-# - <@user_id> (⏳ 대기중) [mid:message_id]
-_ENTRY_RE = re.compile(
-    r'- <@(\d+)> \((?:✅ 게시됨 ([\S]+)|⏳ 대기중)\) \[mid:(\d+)\]'
-)
-
-
-def _parse_entries(content: str) -> list[dict]:
-    return [
-        {
-            'user_id':   int(m.group(1)),
-            'posted_at': datetime.datetime.fromisoformat(m.group(2)) if m.group(2) else None,
-            'message_id': int(m.group(3)),
-        }
-        for m in _ENTRY_RE.finditer(content)
-    ]
-
-def _format_entry(user_id: int, message_id: int, posted_at: datetime.datetime | None) -> str:
-    status = f"✅ 게시됨 {posted_at.isoformat()}" if posted_at else "⏳ 대기중"
-    return f"- <@{user_id}> ({status}) [mid:{message_id}]"
-
-def _build_content(thread_name: str, entries: list[dict]) -> str:
-    lines = [f"**{thread_name} 신청 현황**"]
-    lines += [_format_entry(e['user_id'], e['message_id'], e['posted_at']) for e in entries]
-    return "\n".join(lines)
-
 
 async def _get_latest_thread(channel) -> discord.Thread | None:
     threads = list(channel.threads)
     async for t in channel.archived_threads(limit=None):
         threads.append(t)
     return max(threads, key=lambda t: t.created_at) if threads else None
-
-async def _find_mgmt_message(mgmt_thread, thread_name: str) -> discord.Message | None:
-    """관리 스레드에서 해당 주차 관리 메시지를 찾아 반환"""
-    header = f"**{thread_name} 신청 현황**"
-    async for msg in mgmt_thread.history(limit=None):
-        if msg.author.bot and msg.content.startswith(header):
-            return msg
-    return None
-
-async def _get_last_posted_time(mgmt_thread, user_id: int) -> datetime.datetime | None:
-    """전체 관리 메시지 이력에서 사용자의 가장 최근 교훈 게시 시각을 조회"""
-    last = None
-    async for msg in mgmt_thread.history(limit=None):
-        if not (msg.author.bot and '신청 현황' in msg.content):
-            continue
-        for entry in _parse_entries(msg.content):
-            if entry['user_id'] == user_id and entry['posted_at']:
-                if last is None or entry['posted_at'] > last:
-                    last = entry['posted_at']
-    return last
 
 def _week_of_month(date: datetime.date) -> int:
     count = 0
@@ -98,21 +50,25 @@ class KyohoonManagement(commands.Cog):
         if latest_sub_thread is None:
             return
 
-        mgmt_msg = await _find_mgmt_message(mgmt_thread, latest_sub_thread.name)
-        if mgmt_msg is None:
-            return
-
-        entries = _parse_entries(mgmt_msg.content)
-        unposted = [e for e in entries if e['posted_at'] is None]
+        # 미게시 신청 목록 조회
+        unposted = await self.bot.db.fetch(
+            "SELECT user_id, message_id FROM kyohoon_submissions "
+            "WHERE thread_id = $1 AND posted_at IS NULL ORDER BY submitted_at",
+            latest_sub_thread.id
+        )
         if not unposted:
             return
 
-        # 우선순위: 이전 교훈 게시 시점이 가장 오래된 사람 → message_id 오름차순(먼저 신청한 순)
+        # 우선순위: 이전 교훈 게시 시점이 가장 오래된 사람 → submitted_at 오름차순
         epoch = datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc)
-        priorities = [
-            (await _get_last_posted_time(mgmt_thread, e['user_id']) or epoch, e['message_id'], e)
-            for e in unposted
-        ]
+        priorities = []
+        for row in unposted:
+            last = await self.bot.db.fetchval(
+                "SELECT MAX(posted_at) FROM kyohoon_submissions "
+                "WHERE user_id = $1 AND posted_at IS NOT NULL",
+                row['user_id']
+            ) or epoch
+            priorities.append((last, row['message_id'], row))
         selected = min(priorities, key=lambda x: (x[0], x[1]))[2]
 
         try:
@@ -126,14 +82,19 @@ class KyohoonManagement(commands.Cog):
         title = f"이 주의 교훈, {now_kst.month}월 {week}주차, {submission_msg.author.display_name}"
         await notify_ch.create_thread(name=title, content=submission_msg.content)
 
-        # 관리 메시지 갱신 (게시 시각 기록)
-        for e in entries:
-            if e['message_id'] == selected['message_id']:
-                e['posted_at'] = now_kst
-        await mgmt_msg.edit(content=_build_content(latest_sub_thread.name, entries))
+        # DB 갱신 및 관리 메시지 표시 갱신
+        await self.bot.db.execute(
+            "UPDATE kyohoon_submissions SET posted_at = $1 WHERE message_id = $2",
+            now_kst, selected['message_id']
+        )
+        await self._update_management_message(mgmt_thread, latest_sub_thread.id, latest_sub_thread.name)
 
         # 모든 신청이 게시되었으면 새 신청 스레드 생성
-        if all(e['posted_at'] is not None for e in entries):
+        remaining = await self.bot.db.fetchval(
+            "SELECT COUNT(*) FROM kyohoon_submissions WHERE thread_id = $1 AND posted_at IS NULL",
+            latest_sub_thread.id
+        )
+        if remaining == 0:
             new_title  = f"{now_kst.month}월 {week}주차 교훈 신청"
             new_thread = await submission_ch.create_thread(
                 name=new_title,
@@ -180,11 +141,12 @@ class KyohoonManagement(commands.Cog):
             )
             return
 
-        # 관리 메시지에서 중복 신청 여부 확인
-        mgmt_msg = await _find_mgmt_message(mgmt_thread, message.channel.name)
-        entries  = _parse_entries(mgmt_msg.content) if mgmt_msg else []
-
-        if any(e['user_id'] == author.id for e in entries):
+        # 중복 신청 검사
+        existing = await self.bot.db.fetchrow(
+            "SELECT 1 FROM kyohoon_submissions WHERE thread_id = $1 AND user_id = $2",
+            message.channel.id, author.id
+        )
+        if existing:
             await message.delete()
             try:
                 await author.send(self._msgs['duplicate_submission'].format(content=content))
@@ -196,12 +158,11 @@ class KyohoonManagement(commands.Cog):
             return
 
         # 신청 등록 및 관리 메시지 갱신
-        entries.append({'user_id': author.id, 'message_id': message.id, 'posted_at': None})
-        new_content = _build_content(message.channel.name, entries)
-        if mgmt_msg:
-            await mgmt_msg.edit(content=new_content)
-        else:
-            await mgmt_thread.send(new_content)
+        await self.bot.db.execute(
+            "INSERT INTO kyohoon_submissions(thread_id, user_id, message_id) VALUES($1, $2, $3)",
+            message.channel.id, author.id, message.id
+        )
+        await self._update_management_message(mgmt_thread, message.channel.id, message.channel.name)
 
     # ------------------------------------------------------------------ #
     # 신청 메시지 수정/삭제 감지
@@ -235,18 +196,15 @@ class KyohoonManagement(commands.Cog):
         if latest_thread is None or channel.id != latest_thread.id:
             return
 
-        mgmt_thread = self.bot.get_channel(int(os.getenv("KYOHOON_MANAGEMENT_ID")))
-        mgmt_msg    = await _find_mgmt_message(mgmt_thread, channel.name)
-        if mgmt_msg is None:
-            return
-
-        entries = _parse_entries(mgmt_msg.content)
-        matched = next((e for e in entries if e['message_id'] == message_id), None)
-        if matched is None or matched['posted_at'] is None:
+        row = await self.bot.db.fetchrow(
+            "SELECT user_id, posted_at FROM kyohoon_submissions WHERE message_id = $1",
+            message_id
+        )
+        if row is None or row['posted_at'] is None:
             return
 
         if user_id is None:
-            user_id = matched['user_id']
+            user_id = row['user_id']
 
         user       = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
         log_thread = self.bot.get_channel(int(os.getenv("LOG_THREAD_ID")))
@@ -257,6 +215,42 @@ class KyohoonManagement(commands.Cog):
             pass
         await log_thread.send(
             f"[게시 후 수정/삭제] {user.mention}이 이미 게시된 교훈을 수정하거나 삭제했습니다."
+        )
+
+    # ------------------------------------------------------------------ #
+    # 관리 메시지 갱신 (교훈 관리 스레드)
+    # ------------------------------------------------------------------ #
+
+    async def _update_management_message(self, mgmt_thread, thread_id: int, thread_name: str):
+        rows = await self.bot.db.fetch(
+            "SELECT user_id, posted_at FROM kyohoon_submissions "
+            "WHERE thread_id = $1 ORDER BY submitted_at",
+            thread_id
+        )
+
+        lines = [f"**{thread_name} 신청 현황**"]
+        for row in rows:
+            status = "✅ 게시됨" if row['posted_at'] else "⏳ 대기중"
+            lines.append(f"- <@{row['user_id']}> ({status})")
+        content = "\n".join(lines)
+
+        mgmt_msg_id = await self.bot.db.fetchval(
+            "SELECT message_id FROM kyohoon_mgmt_messages WHERE thread_id = $1",
+            thread_id
+        )
+        if mgmt_msg_id:
+            try:
+                msg = await mgmt_thread.fetch_message(mgmt_msg_id)
+                await msg.edit(content=content)
+                return
+            except discord.NotFound:
+                pass
+
+        new_msg = await mgmt_thread.send(content)
+        await self.bot.db.execute(
+            "INSERT INTO kyohoon_mgmt_messages(thread_id, message_id) VALUES($1, $2) "
+            "ON CONFLICT(thread_id) DO UPDATE SET message_id = EXCLUDED.message_id",
+            thread_id, new_msg.id
         )
 
 

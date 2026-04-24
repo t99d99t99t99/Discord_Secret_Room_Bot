@@ -13,6 +13,12 @@ class RelayStoryManagement(commands.Cog):
         self._warn_too_long = messages['relay_story']['too_long']
         self._warn_consecutive = messages['relay_story']['consecutive']
 
+    async def cog_load(self):
+        row = await self.bot.db.fetchrow(
+            "SELECT value FROM relay_story WHERE key = 'last_author_id'"
+        )
+        self._last_author_id = int(row['value']) if row else None
+
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author == self.bot.user:
@@ -42,6 +48,11 @@ class RelayStoryManagement(commands.Cog):
                 f"[이야기잇기 규칙 위반] {message.author.mention}의 메시지가 삭제되었습니다. (사유: {reason})"
             )
         else:
+            await self.bot.db.execute(
+                "INSERT INTO relay_story(key, value) VALUES('last_author_id', $1) "
+                "ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value",
+                str(author_id)
+            )
             self._last_author_id = author_id
 
 async def setup(bot):

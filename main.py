@@ -3,6 +3,7 @@ import os
 import asyncio
 from discord.ext import commands
 from dotenv import load_dotenv
+from db import init_pool
 
 async def main():
     load_dotenv()
@@ -12,8 +13,8 @@ async def main():
     intents.message_content = True
 
     bot = commands.Bot(command_prefix="!", intents=intents)
+    bot.db = await init_pool(os.getenv("DATABASE_URL"))
 
-    
     await bot.load_extension('cogs.general')
     await bot.load_extension('cogs.relay_story_management')
     await bot.load_extension('cogs.kyohoon_management')
