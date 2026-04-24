@@ -36,6 +36,11 @@ class RelayStoryManagement(commands.Cog):
                 await message.author.send(warn_template.format(content=content))
             except discord.Forbidden:
                 pass
+            log_thread = self.bot.get_channel(int(os.getenv("LOG_THREAD_ID")))
+            reason = "200자 초과" if len(content) > 200 else "연속 작성"
+            await log_thread.send(
+                f"[이야기잇기 규칙 위반] {message.author.mention}의 메시지가 삭제되었습니다. (사유: {reason})"
+            )
         else:
             self._last_author_id = author_id
 
