@@ -21,3 +21,6 @@ class General(commands.Cog):
         # 본인의 메시지는 무시합니다
         if message.author == self.bot.user:
             return
+
+async def setup(bot):
+    await bot.add_cog(General(bot))
