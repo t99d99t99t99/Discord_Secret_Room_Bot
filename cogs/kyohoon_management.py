@@ -102,8 +102,9 @@ class KyohoonManagement(commands.Cog):
         # 이-주의-교훈 채널에 새 스레드로 등록
         now_kst = datetime.datetime.now(KST)
         week  = _week_of_month(now_kst.date())
-        title = f"이 주의 교훈, {now_kst.month}월 {week}주차, {submission_msg.author.display_name}"
-        await notify_ch.create_thread(name=title, content=submission_msg.content)
+        title = f"{now_kst.month}월 {week}주차, {submission_msg.author.display_name}"
+        files = [await att.to_file() for att in submission_msg.attachments]
+        await notify_ch.create_thread(name=title, content=submission_msg.content, files=files)
 
         # DB 갱신 및 관리 메시지 표시 갱신
         await self.bot.db.execute(
