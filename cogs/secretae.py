@@ -37,7 +37,7 @@ def _fmt(num: int) -> str:
 def _render_grid(arr, width: int, height: int) -> str:
     lines = []
     for y in range(height):
-        line = "".join(SYMBOL[arr[x][y]["shape"]][arr[x][y]["color"]] for x in range(width))
+        line = "".join("\\" + SYMBOL[arr[x][y]["shape"]][arr[x][y]["color"]] for x in range(width))
         lines.append(line)
     return "\n".join(lines)
 
@@ -101,13 +101,12 @@ class FactorySelect(discord.ui.Select):
         super().__init__(placeholder="가동할 공장을 선택하세요", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
 
         user = await get_user(self.bot.db, self.discord_id)
         if user["last_produced_date"] == _game_date():
             await interaction.followup.send(
                 "이미 오늘 생산을 완료했습니다. 매일 오전 6시(KST)에 초기화됩니다.",
-                ephemeral=True,
             )
             self.view.stop()
             return
@@ -136,7 +135,7 @@ class FactorySelect(discord.ui.Select):
 
         await save_secrets(self.bot.db, self.discord_id, color_secrets, shape_secrets)
         await update_last_produced(self.bot.db, self.discord_id, _game_date())
-        await interaction.followup.send("\n".join(lines), ephemeral=True)
+        await interaction.followup.send("\n".join(lines))
         self.view.stop()
 
 
@@ -170,21 +169,20 @@ class Secretae(commands.Cog):
 
     @game.command(name="등록", description="신규 유저를 게임에 등록합니다. 공장 3개가 지급됩니다.")
     async def register(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         if await get_user(self.bot.db, interaction.user.id):
-            await interaction.followup.send("이미 등록된 유저입니다.", ephemeral=True)
+            await interaction.followup.send("이미 등록된 유저입니다.")
             return
         await create_user(self.bot.db, interaction.user.id)
         await interaction.followup.send(
             "등록이 완료되었습니다! 공장 3개가 지급되었어요.\n`/게임 프로필`로 현황을 확인할 수 있습니다.",
-            ephemeral=True,
         )
 
     @game.command(name="프로필", description="보유 Secret과 공장 목록을 조회합니다.")
     async def profile(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         if not await get_user(self.bot.db, interaction.user.id):
-            await interaction.followup.send("`/게임 등록`으로 먼저 등록해 주세요.", ephemeral=True)
+            await interaction.followup.send("`/게임 등록`으로 먼저 등록해 주세요.")
             return
 
         secrets = await get_secrets(self.bot.db, interaction.user.id)
@@ -206,34 +204,34 @@ class Secretae(commands.Cog):
             )
         embed.add_field(name="보유 공장", value="\n".join(factory_lines), inline=False)
 
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed)
 
     @game.command(name="생산", description="공장을 선택하여 오늘의 Secret을 생산합니다. 하루 1회 제한.")
     async def produce(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         user = await get_user(self.bot.db, interaction.user.id)
         if not user:
-            await interaction.followup.send("`/게임 등록`으로 먼저 등록해 주세요.", ephemeral=True)
+            await interaction.followup.send("`/게임 등록`으로 먼저 등록해 주세요.")
             return
         if user["last_produced_date"] == _game_date():
             await interaction.followup.send(
-                "오늘은 이미 생산했습니다. 매일 오전 6시(KST)에 초기화됩니다.", ephemeral=True
+                "오늘은 이미 생산했습니다. 매일 오전 6시(KST)에 초기화됩니다."
             )
             return
         factories = await get_factories(self.bot.db, interaction.user.id)
         view = ProduceView(self.bot, interaction.user.id, factories)
-        await interaction.followup.send("가동할 공장을 선택하세요.", view=view, ephemeral=True)
+        await interaction.followup.send("가동할 공장을 선택하세요.", view=view)
 
     @game.command(name="공장", description="공장의 이모지 배열을 자세히 봅니다.")
     @app_commands.describe(번호="조회할 공장 번호 (1, 2, 3)")
     async def factory(self, interaction: discord.Interaction, 번호: int):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         if not await get_user(self.bot.db, interaction.user.id):
-            await interaction.followup.send("`/게임 등록`으로 먼저 등록해 주세요.", ephemeral=True)
+            await interaction.followup.send("`/게임 등록`으로 먼저 등록해 주세요.")
             return
         factories = await get_factories(self.bot.db, interaction.user.id)
         if not 1 <= 번호 <= len(factories):
-            await interaction.followup.send(f"1~{len(factories)} 사이의 번호를 입력하세요.", ephemeral=True)
+            await interaction.followup.send(f"1~{len(factories)} 사이의 번호를 입력하세요.")
             return
         f = factories[번호 - 1]
         color_prod, shape_prod = _produce(f["arr"], f["width"], f["height"])
@@ -246,7 +244,7 @@ class Secretae(commands.Cog):
             name="예상 생산량",
             value=f"색 {_fmt(sum(color_prod.values()))}  /  모양 {_fmt(sum(shape_prod.values()))}",
         )
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed)
 
 
 async def setup(bot):
