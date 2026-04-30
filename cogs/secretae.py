@@ -37,7 +37,7 @@ def _fmt(num: int) -> str:
 def _render_grid(arr, width: int, height: int) -> str:
     lines = []
     for y in range(height):
-        line = "".join("\\" + SYMBOL[arr[x][y]["shape"]][arr[x][y]["color"]] for x in range(width))
+        line = "".join(SYMBOL[arr[x][y]["shape"]][arr[x][y]["color"]] for x in range(width))
         lines.append(line)
     return "\n".join(lines)
 
