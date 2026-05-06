@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands, tasks
 import datetime
 import yaml
+from .secretae_db import COLOR_NAMES, SHAPE_NAMES, grant_kyohoon_submission_reward
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 
@@ -187,6 +188,14 @@ class KyohoonManagement(commands.Cog):
             message.channel.id, author.id, message.id
         )
         await self._update_management_message(mgmt_thread, message.channel.id, message.channel.name)
+        reward = await grant_kyohoon_submission_reward(
+            self.bot.db, author.id, message.channel.id, message.id,
+        )
+        if reward.get("awarded"):
+            try:
+                await author.send(self._format_kyohoon_reward_dm(reward))
+            except discord.Forbidden:
+                pass
 
     # ------------------------------------------------------------------ #
     # 신청 메시지 수정/삭제 감지
@@ -276,6 +285,24 @@ class KyohoonManagement(commands.Cog):
             "ON CONFLICT(thread_id) DO UPDATE SET message_id = EXCLUDED.message_id",
             thread_id, new_msg.id
         )
+
+    def _format_kyohoon_reward_dm(self, reward: dict) -> str:
+        summary = reward["summary"]
+        lines = [
+            "교훈 신청이 등록되어 시크리타이 보상을 받았습니다.",
+            f"보유한 모든 공장에서 각각 {summary['times']}회씩 추가 생산을 진행했습니다.",
+        ]
+        if reward.get("created_user"):
+            lines.append("시크리타이 게임 기록이 없어 기본 계정을 함께 생성했습니다.")
+
+        color_total = sum(summary["color"].get(name, 0) for name in COLOR_NAMES)
+        shape_total = sum(summary["shape"].get(name, 0) for name in SHAPE_NAMES)
+        lines.append(f"획득: 색깔 Secret {color_total}개 / 모양 Secret {shape_total}개")
+        for factory in summary["factories"]:
+            lines.append(
+                f"- {factory['slot'] + 1}번 공장: 색 {factory['color']}개 / 모양 {factory['shape']}개"
+            )
+        return "\n".join(lines)
 
 
 async def setup(bot):

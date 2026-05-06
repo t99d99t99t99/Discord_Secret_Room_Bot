@@ -2,6 +2,7 @@ import os
 import discord
 from discord.ext import commands
 import yaml
+from .secretae_db import grant_story_essence
 
 class RelayStoryManagement(commands.Cog):
     def __init__(self, bot):
@@ -44,6 +45,18 @@ class RelayStoryManagement(commands.Cog):
             await log_thread.send(
                 f"[이야기잇기 규칙 위반] {message.author.mention}의 메시지가 삭제되었습니다. (사유: {reason})"
             )
+            return
+
+        reward = await grant_story_essence(self.bot.db, message.author.id, message.id)
+        if reward.get("awarded"):
+            lines = ["이야기잇기에 참여하여 **이야기의 정수** 1개를 얻었습니다."]
+            if reward.get("created_user"):
+                lines.append("시크리타이 게임 기록이 없어 기본 계정을 함께 생성했습니다.")
+            lines.append(f"현재 보유한 이야기의 정수: {reward['story_essence_count']}개")
+            try:
+                await message.author.send("\n".join(lines))
+            except discord.Forbidden:
+                pass
 
 async def setup(bot):
     await bot.add_cog(RelayStoryManagement(bot))

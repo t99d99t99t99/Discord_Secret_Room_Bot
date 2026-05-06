@@ -32,6 +32,12 @@ async def init_pool(dsn: str) -> asyncpg.Pool:
             )
         """)
         await conn.execute("""
+            ALTER TABLE sc_users
+            ADD COLUMN IF NOT EXISTS last_item_used_date DATE,
+            ADD COLUMN IF NOT EXISTS item_uses_today SMALLINT NOT NULL DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS story_essence_count INT NOT NULL DEFAULT 0
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS sc_factories (
                 id         SERIAL PRIMARY KEY,
                 discord_id BIGINT NOT NULL REFERENCES sc_users(discord_id),
@@ -49,4 +55,58 @@ async def init_pool(dsn: str) -> asyncpg.Pool:
                 shape_secrets JSONB NOT NULL
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS sc_items (
+                discord_id BIGINT NOT NULL REFERENCES sc_users(discord_id),
+                slot       SMALLINT NOT NULL,
+                item       JSONB NOT NULL,
+                PRIMARY KEY (discord_id, slot)
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS sc_story_essence_rewards (
+                message_id  BIGINT PRIMARY KEY,
+                discord_id  BIGINT NOT NULL,
+                awarded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS sc_kyohoon_rewards (
+                submission_message_id BIGINT PRIMARY KEY,
+                discord_id            BIGINT NOT NULL,
+                thread_id             BIGINT NOT NULL,
+                awarded_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                reward_summary        JSONB NOT NULL
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS sc_migrations (
+                version    INT PRIMARY KEY,
+                applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        applied = {row["version"] for row in await conn.fetch("SELECT version FROM sc_migrations")}
+
+        if 1 not in applied:
+            rows = await conn.fetch("SELECT id, width, height, arr FROM sc_factories")
+            for row in rows:
+                arr, width, height = row["arr"], row["width"], row["height"]
+                if width == height or len(arr) != width or any(len(col) != height for col in arr):
+                    continue
+                transposed = [[arr[x][y] for x in range(width)] for y in range(height)]
+                await conn.execute(
+                    "UPDATE sc_factories SET arr = $1 WHERE id = $2",
+                    transposed, row["id"],
+                )
+            await conn.execute("INSERT INTO sc_migrations(version) VALUES(1)")
+        if 2 not in applied:
+            users = await conn.fetch("SELECT discord_id FROM sc_users")
+            for user in users:
+                for slot in range(3):
+                    await conn.execute(
+                        "INSERT INTO sc_items(discord_id, slot, item) VALUES($1, $2, $3) "
+                        "ON CONFLICT (discord_id, slot) DO NOTHING",
+                        user["discord_id"], slot, {"type": "Empty", "rank": 0},
+                    )
+            await conn.execute("INSERT INTO sc_migrations(version) VALUES(2)")
     return pool
