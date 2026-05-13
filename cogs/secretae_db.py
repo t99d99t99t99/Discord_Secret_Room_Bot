@@ -8,7 +8,7 @@ FACTORY_WIDTH = 5
 FACTORY_HEIGHT = 3
 FACTORY_COUNT = 3
 ITEM_COUNT = 3
-ITEM_USES_PER_DAY = 3
+ITEM_USES_PER_DAY = 1
 KYOHOON_EXTRA_PRODUCE_PER_FACTORY = 10
 
 
@@ -230,39 +230,58 @@ async def consume_story_essence(pool, discord_id: int) -> bool:
     return result == 1
 
 
-async def produce_factory(pool, discord_id: int, factory_id: int, date, use_story_essence: bool = False) -> dict:
+async def produce_all_factories(pool, discord_id: int, date, use_story_essence: bool = False) -> dict:
     async with pool.acquire() as conn:
         async with conn.transaction():
             user = await conn.fetchrow("SELECT * FROM sc_users WHERE discord_id = $1 FOR UPDATE", discord_id)
             if user is None:
                 return {"ok": False, "reason": "not_registered"}
-            if user["last_produced_date"] == date:
+            already_produced = user["last_produced_date"] == date
+            if already_produced:
                 if not use_story_essence:
                     return {"ok": False, "reason": "already_produced"}
                 if user["story_essence_count"] <= 0:
                     return {"ok": False, "reason": "no_story_essence"}
 
-            factory = await conn.fetchrow(
-                "SELECT * FROM sc_factories WHERE id = $1 AND discord_id = $2 FOR UPDATE",
-                factory_id, discord_id,
+            factories = await conn.fetch(
+                "SELECT * FROM sc_factories WHERE discord_id = $1 ORDER BY slot FOR UPDATE",
+                discord_id,
             )
-            if factory is None:
+            if not factories:
                 return {"ok": False, "reason": "factory_not_found"}
+
             secrets = await conn.fetchrow("SELECT * FROM sc_secrets WHERE discord_id = $1 FOR UPDATE", discord_id)
             color_secrets = dict(secrets["color_secrets"])
             shape_secrets = dict(secrets["shape_secrets"])
-            color_prod, shape_prod = _produce(factory["arr"], factory["width"], factory["height"])
+            total_color = defaultdict(int)
+            total_shape = defaultdict(int)
+            factory_summaries = []
 
-            for i, name in enumerate(COLOR_NAMES):
-                color_secrets[name] += color_prod.get(i, 0)
-            for i, name in enumerate(SHAPE_NAMES):
-                shape_secrets[name] += shape_prod.get(i, 0)
+            for factory in factories:
+                color_prod, shape_prod = _produce(factory["arr"], factory["width"], factory["height"])
+                color_sum = 0
+                shape_sum = 0
+                for i, name in enumerate(COLOR_NAMES):
+                    gain = color_prod.get(i, 0)
+                    color_secrets[name] += gain
+                    total_color[i] += gain
+                    color_sum += gain
+                for i, name in enumerate(SHAPE_NAMES):
+                    gain = shape_prod.get(i, 0)
+                    shape_secrets[name] += gain
+                    total_shape[i] += gain
+                    shape_sum += gain
+                factory_summaries.append({
+                    "slot": factory["slot"],
+                    "color": color_sum,
+                    "shape": shape_sum,
+                })
 
             await conn.execute(
                 "UPDATE sc_secrets SET color_secrets = $1, shape_secrets = $2 WHERE discord_id = $3",
                 color_secrets, shape_secrets, discord_id,
             )
-            if use_story_essence and user["last_produced_date"] == date:
+            if use_story_essence and already_produced:
                 await conn.execute(
                     "UPDATE sc_users SET story_essence_count = story_essence_count - 1 WHERE discord_id = $1",
                     discord_id,
@@ -275,11 +294,12 @@ async def produce_factory(pool, discord_id: int, factory_id: int, date, use_stor
 
             return {
                 "ok": True,
-                "color_prod": dict(color_prod),
-                "shape_prod": dict(shape_prod),
+                "color_prod": dict(total_color),
+                "shape_prod": dict(total_shape),
                 "color_secrets": color_secrets,
                 "shape_secrets": shape_secrets,
-                "used_story_essence": use_story_essence and user["last_produced_date"] == date,
+                "factories": factory_summaries,
+                "used_story_essence": use_story_essence and already_produced,
             }
 
 

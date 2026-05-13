@@ -12,7 +12,7 @@ from .secretae_db import (
     COLOR_NAMES, SHAPE_NAMES, ITEM_USES_PER_DAY,
     get_user, create_user, get_factories, get_items, get_secrets,
     save_secrets, save_item, save_factory_arr, item_uses_left,
-    record_item_use, consume_story_essence, produce_factory,
+    record_item_use, consume_story_essence, produce_all_factories,
 )
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
@@ -212,7 +212,14 @@ def _format_production_result(result: dict) -> str:
             return "이야기의 정수가 부족합니다."
         return "생산을 진행할 수 없습니다."
 
-    lines = ["**생산이 완료되었습니다!**\n", "**색깔 Secret**"]
+    lines = ["**생산이 완료되었습니다!**"]
+    if result.get("factories"):
+        lines.append("가동 공장: " + ", ".join(
+            f"{factory['slot'] + 1}번(색 {_fmt(factory['color'])} / 모양 {_fmt(factory['shape'])})"
+            for factory in result["factories"]
+        ))
+
+    lines.append("\n**색깔 Secret**")
     for i, name in enumerate(COLOR_NAMES):
         produced = result["color_prod"].get(i, 0)
         after = result["color_secrets"][name]
@@ -250,39 +257,6 @@ class UserBoundView(discord.ui.View):
         return True
 
 
-class FactorySelect(discord.ui.Select):
-    def __init__(self, bot, discord_id: int, factories, use_story_essence: bool = False):
-        self.bot = bot
-        self.discord_id = discord_id
-        self.use_story_essence = use_story_essence
-        self._factories = {f["slot"]: f for f in factories}
-
-        options = []
-        for f in factories:
-            color_prod, shape_prod = _produce(f["arr"], f["width"], f["height"])
-            options.append(discord.SelectOption(
-                label=f"{f['slot'] + 1}번 공장  ({f['width']}×{f['height']})",
-                description=f"색 {_fmt(sum(color_prod.values()))}  /  모양 {_fmt(sum(shape_prod.values()))}",
-                value=str(f["slot"]),
-            ))
-        super().__init__(placeholder="가동할 공장을 선택하세요", options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        f = self._factories[int(self.values[0])]
-        result = await produce_factory(
-            self.bot.db, self.discord_id, f["id"], _game_date(), self.use_story_essence,
-        )
-        await interaction.followup.send(_format_production_result(result))
-        self.view.stop()
-
-
-class ProduceView(UserBoundView):
-    def __init__(self, bot, discord_id: int, factories, use_story_essence: bool = False):
-        super().__init__(discord_id)
-        self.add_item(FactorySelect(bot, discord_id, factories, use_story_essence))
-
-
 class StoryEssenceProduceView(UserBoundView):
     def __init__(self, bot, discord_id: int):
         super().__init__(discord_id)
@@ -291,11 +265,10 @@ class StoryEssenceProduceView(UserBoundView):
     @discord.ui.button(label="이야기의 정수 사용", style=discord.ButtonStyle.primary)
     async def use(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
-        factories = await get_factories(self.bot.db, self.discord_id)
-        await interaction.followup.send(
-            "이야기의 정수 1개로 추가 생산할 공장을 선택하세요.",
-            view=ProduceView(self.bot, self.discord_id, factories, use_story_essence=True),
+        result = await produce_all_factories(
+            self.bot.db, self.discord_id, _game_date(), use_story_essence=True,
         )
+        await interaction.followup.send(_format_production_result(result))
         self.stop()
 
 
@@ -822,7 +795,7 @@ class Secretae(commands.Cog):
 
         await interaction.followup.send(embed=embed)
 
-    @game.command(name="생산", description="공장을 선택하여 오늘의 Secret을 생산합니다. 하루 1회 제한.")
+    @game.command(name="생산", description="세 공장을 모두 가동하여 오늘의 Secret을 생산합니다. 하루 1회 제한.")
     async def produce(self, interaction: discord.Interaction):
         await interaction.response.defer()
         user = await get_user(self.bot.db, interaction.user.id)
@@ -840,9 +813,8 @@ class Secretae(commands.Cog):
                     "오늘은 이미 생산했습니다. 매일 오전 6시(KST)에 초기화됩니다."
                 )
             return
-        factories = await get_factories(self.bot.db, interaction.user.id)
-        view = ProduceView(self.bot, interaction.user.id, factories)
-        await interaction.followup.send("가동할 공장을 선택하세요.", view=view)
+        result = await produce_all_factories(self.bot.db, interaction.user.id, _game_date())
+        await interaction.followup.send(_format_production_result(result))
 
     @game.command(name="공장", description="공장의 이모지 배열을 자세히 봅니다.")
     @app_commands.describe(번호="조회할 공장 번호 (1, 2, 3)")
