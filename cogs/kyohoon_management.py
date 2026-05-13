@@ -31,6 +31,10 @@ def _channel_detail(channel) -> str:
     return f"{channel.mention} (`{channel.id}`)"
 
 
+def _created_thread(result):
+    return result.thread if hasattr(result, "thread") else result
+
+
 class KyohoonManagement(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -229,10 +233,11 @@ class KyohoonManagement(commands.Cog):
             now_kst = datetime.datetime.now(KST)
         week = _week_of_month(now_kst.date())
         new_title = f"{now_kst.month}월 {week}주차 교훈 신청"
-        new_thread = await submission_ch.create_thread(
+        created = await submission_ch.create_thread(
             name=new_title,
             content="교훈 신청하세요!!!!!!!!!!",
         )
+        new_thread = _created_thread(created)
         await new_thread.send("@everyone")
         return new_thread
 
