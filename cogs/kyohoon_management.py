@@ -2,6 +2,7 @@ import os
 import discord
 from discord.ext import commands, tasks
 import datetime
+import traceback
 import yaml
 from .secretae_db import COLOR_NAMES, SHAPE_NAMES, grant_kyohoon_submission_reward
 
@@ -22,6 +23,12 @@ def _week_of_month(date: datetime.date) -> int:
             count += 1
         d += datetime.timedelta(days=1)
     return count
+
+
+def _channel_detail(channel) -> str:
+    if channel is None:
+        return "없음"
+    return f"{channel.mention} (`{channel.id}`)"
 
 
 class KyohoonManagement(commands.Cog):
@@ -66,13 +73,60 @@ class KyohoonManagement(commands.Cog):
         if datetime.datetime.now(KST).weekday() != 6:
             return
 
-        submission_ch = self.bot.get_channel(int(os.getenv("KYOHOON_SUBMISSION_ID")))
-        notify_ch     = self.bot.get_channel(int(os.getenv("KYOHOON_NOTIFY_ID")))
-        mgmt_thread   = self.bot.get_channel(int(os.getenv("KYOHOON_MANAGEMENT_ID")))
+        await self._execute_kyohoon_update("자동", None)
+
+    async def _execute_kyohoon_update(self, trigger: str, operator, raise_errors: bool = True) -> bool:
+        started_at = datetime.datetime.now(KST)
+        submission_ch = self._get_configured_channel("KYOHOON_SUBMISSION_ID")
+        notify_ch     = self._get_configured_channel("KYOHOON_NOTIFY_ID")
+        mgmt_thread   = self._get_configured_channel("KYOHOON_MANAGEMENT_ID")
+
+        try:
+            return await self._run_kyohoon_update(
+                started_at, submission_ch, notify_ch, mgmt_thread, trigger, operator,
+            )
+        except Exception as exc:
+            tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5))
+            await self._send_log_thread_message(
+                "[교훈 갱신 실패]\n"
+                f"- 실행 방식: {trigger}\n"
+                f"- 실행자: {operator.mention if operator else '시스템'}\n"
+                f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
+                f"- 신청 채널: {_channel_detail(submission_ch)}\n"
+                f"- 게시 채널: {_channel_detail(notify_ch)}\n"
+                f"- 관리 스레드: {_channel_detail(mgmt_thread)}\n"
+                f"- 사유: 예외 발생 (`{type(exc).__name__}: {exc}`)\n"
+                f"```py\n{tb[-1500:]}\n```"
+            )
+            if raise_errors:
+                raise
+            return False
+
+    async def _run_kyohoon_update(self, started_at, submission_ch, notify_ch, mgmt_thread, trigger, operator):
+        if submission_ch is None or notify_ch is None or mgmt_thread is None:
+            await self._send_log_thread_message(
+                "[교훈 갱신 실패]\n"
+                f"- 실행 방식: {trigger}\n"
+                f"- 실행자: {operator.mention if operator else '시스템'}\n"
+                f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
+                f"- 신청 채널: {_channel_detail(submission_ch)}\n"
+                f"- 게시 채널: {_channel_detail(notify_ch)}\n"
+                f"- 관리 스레드: {_channel_detail(mgmt_thread)}\n"
+                "- 사유: 필요한 채널 또는 스레드를 찾지 못했습니다."
+            )
+            return False
 
         latest_sub_thread = await _get_latest_thread(submission_ch)
         if latest_sub_thread is None:
-            return
+            await self._send_log_thread_message(
+                "[교훈 갱신 실패]\n"
+                f"- 실행 방식: {trigger}\n"
+                f"- 실행자: {operator.mention if operator else '시스템'}\n"
+                f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
+                f"- 신청 채널: {_channel_detail(submission_ch)}\n"
+                "- 사유: 신청 채널에 교훈 신청 스레드가 없습니다."
+            )
+            return False
 
         # 미게시 신청 목록 조회
         unposted = await self.bot.db.fetch(
@@ -81,7 +135,15 @@ class KyohoonManagement(commands.Cog):
             latest_sub_thread.id
         )
         if not unposted:
-            return
+            await self._send_log_thread_message(
+                "[교훈 갱신 실패]\n"
+                f"- 실행 방식: {trigger}\n"
+                f"- 실행자: {operator.mention if operator else '시스템'}\n"
+                f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
+                f"- 신청 스레드: {latest_sub_thread.mention} (`{latest_sub_thread.id}`, {latest_sub_thread.name})\n"
+                "- 사유: 게시 대기 중인 교훈 신청이 없습니다."
+            )
+            return False
 
         # 우선순위: 이전 교훈 게시 시점이 가장 오래된 사람 → submitted_at 오름차순
         epoch = datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc)
@@ -98,7 +160,17 @@ class KyohoonManagement(commands.Cog):
         try:
             submission_msg = await latest_sub_thread.fetch_message(selected['message_id'])
         except discord.NotFound:
-            return
+            await self._send_log_thread_message(
+                "[교훈 갱신 실패]\n"
+                f"- 실행 방식: {trigger}\n"
+                f"- 실행자: {operator.mention if operator else '시스템'}\n"
+                f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
+                f"- 신청 스레드: {latest_sub_thread.mention} (`{latest_sub_thread.id}`, {latest_sub_thread.name})\n"
+                f"- 선택된 신청자: <@{selected['user_id']}> (`{selected['user_id']}`)\n"
+                f"- 신청 메시지 ID: `{selected['message_id']}`\n"
+                "- 사유: 선택된 신청 메시지를 찾을 수 없습니다."
+            )
+            return False
 
         # 이-주의-교훈 채널에 새 스레드로 등록
         now_kst = datetime.datetime.now(KST)
@@ -119,17 +191,118 @@ class KyohoonManagement(commands.Cog):
             "SELECT COUNT(*) FROM kyohoon_submissions WHERE thread_id = $1 AND posted_at IS NULL",
             latest_sub_thread.id
         )
+        created_submission_thread = None
         if remaining == 0:
-            new_title  = f"{now_kst.month}월 {week}주차 교훈 신청"
-            new_thread = await submission_ch.create_thread(
-                name=new_title,
-                content="교훈 신청하세요!!!!!!!!!!",
-            )
-            await new_thread.send("@everyone")
+            created_submission_thread = await self._create_kyohoon_submission_thread(submission_ch, now_kst)
+
+        await self._send_log_thread_message(
+            "[교훈 갱신 성공]\n"
+            f"- 실행 방식: {trigger}\n"
+            f"- 실행자: {operator.mention if operator else '시스템'}\n"
+            f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
+            f"- 완료 시각: {datetime.datetime.now(KST):%Y-%m-%d %H:%M:%S KST}\n"
+            f"- 신청 스레드: {latest_sub_thread.mention} (`{latest_sub_thread.id}`, {latest_sub_thread.name})\n"
+            f"- 게시 대상자: {submission_msg.author.mention} (`{submission_msg.author.id}`)\n"
+            f"- 신청 메시지: `{submission_msg.id}`\n"
+            f"- 게시 제목: **{title}**\n"
+            f"- 첨부파일 수: {len(submission_msg.attachments)}개\n"
+            f"- 남은 미게시 신청: {remaining}개\n"
+            f"- 새 신청 스레드 생성: {created_submission_thread.mention if created_submission_thread else '아니오'}"
+        )
+        return True
 
     @update_Kyohoon.before_loop
     async def before_update_Kyohoon(self):
         await self.bot.wait_until_ready()
+
+    def _get_configured_channel(self, env_name: str):
+        channel_id = os.getenv(env_name)
+        if channel_id is None:
+            return None
+        try:
+            return self.bot.get_channel(int(channel_id))
+        except ValueError:
+            return None
+
+    async def _create_kyohoon_submission_thread(self, submission_ch, now_kst=None):
+        if now_kst is None:
+            now_kst = datetime.datetime.now(KST)
+        week = _week_of_month(now_kst.date())
+        new_title = f"{now_kst.month}월 {week}주차 교훈 신청"
+        new_thread = await submission_ch.create_thread(
+            name=new_title,
+            content="교훈 신청하세요!!!!!!!!!!",
+        )
+        await new_thread.send("@everyone")
+        return new_thread
+
+    async def _handle_force_operation(self, message) -> bool:
+        command = message.content.strip()
+        if command not in ("!force_update", "!force_submission"):
+            return False
+
+        force_thread = self._get_configured_channel("FORCE_OPERATION_ID")
+        if force_thread is None or message.channel.id != force_thread.id:
+            return True
+
+        if command == "!force_update":
+            ok = await self._execute_kyohoon_update("강제", message.author, raise_errors=False)
+            await message.channel.send(
+                "교훈 갱신을 강제로 실행했습니다. 상세 결과는 LOG_THREAD를 확인해 주세요."
+                if ok else
+                "교훈 갱신 강제 실행에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요."
+            )
+            return True
+
+        submission_ch = self._get_configured_channel("KYOHOON_SUBMISSION_ID")
+        started_at = datetime.datetime.now(KST)
+        if submission_ch is None:
+            await self._send_log_thread_message(
+                "[교훈 신청 스레드 강제 생성 실패]\n"
+                f"- 실행자: {message.author.mention}\n"
+                f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
+                "- 사유: KYOHOON_SUBMISSION_ID 채널을 찾지 못했습니다."
+            )
+            await message.channel.send("교훈 신청 스레드 강제 생성에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요.")
+            return True
+
+        try:
+            new_thread = await self._create_kyohoon_submission_thread(submission_ch, started_at)
+        except Exception as exc:
+            tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5))
+            await self._send_log_thread_message(
+                "[교훈 신청 스레드 강제 생성 실패]\n"
+                f"- 실행자: {message.author.mention}\n"
+                f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
+                f"- 신청 채널: {_channel_detail(submission_ch)}\n"
+                f"- 사유: 예외 발생 (`{type(exc).__name__}: {exc}`)\n"
+                f"```py\n{tb[-1500:]}\n```"
+            )
+            await message.channel.send("교훈 신청 스레드 강제 생성에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요.")
+            return True
+
+        await self._send_log_thread_message(
+            "[교훈 신청 스레드 강제 생성 성공]\n"
+            f"- 실행자: {message.author.mention}\n"
+            f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
+            f"- 신청 채널: {_channel_detail(submission_ch)}\n"
+            f"- 생성된 스레드: {new_thread.mention} (`{new_thread.id}`, {new_thread.name})"
+        )
+        await message.channel.send(f"교훈 신청 스레드를 강제로 생성했습니다: {new_thread.mention}")
+        return True
+
+    async def _send_log_thread_message(self, content: str):
+        log_thread = self._get_configured_channel("LOG_THREAD_ID")
+        if log_thread is None:
+            return
+
+        if len(content) > 2000:
+            content = content[:1950] + "\n...(이하 생략)"
+
+        try:
+            await log_thread.send(content)
+        except discord.HTTPException:
+            pass
 
     # ------------------------------------------------------------------ #
     # 교훈 신청 감지
@@ -138,6 +311,9 @@ class KyohoonManagement(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
+            return
+
+        if await self._handle_force_operation(message):
             return
 
         submission_ch_id = int(os.getenv("KYOHOON_SUBMISSION_ID"))
