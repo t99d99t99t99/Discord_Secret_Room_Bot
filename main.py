@@ -18,6 +18,7 @@ async def main():
     await bot.load_extension('cogs.general')
     await bot.load_extension('cogs.relay_story_management')
     await bot.load_extension('cogs.kyohoon_management')
+    await bot.load_extension('cogs.tomak_management')
     await bot.load_extension('cogs.secretae')
 
     async with bot:
