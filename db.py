@@ -26,6 +26,22 @@ async def init_pool(dsn: str) -> asyncpg.Pool:
             )
         """)
         await conn.execute("""
+            CREATE TABLE IF NOT EXISTS tomak_submissions (
+                id           SERIAL PRIMARY KEY,
+                thread_id    BIGINT NOT NULL,
+                user_id      BIGINT NOT NULL,
+                message_id   BIGINT NOT NULL UNIQUE,
+                submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                posted_at    TIMESTAMPTZ
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS tomak_mgmt_messages (
+                thread_id  BIGINT PRIMARY KEY,
+                message_id BIGINT NOT NULL
+            )
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS sc_users (
                 discord_id         BIGINT PRIMARY KEY,
                 last_produced_date DATE
@@ -77,6 +93,14 @@ async def init_pool(dsn: str) -> asyncpg.Pool:
                 thread_id             BIGINT NOT NULL,
                 awarded_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 reward_summary        JSONB NOT NULL
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS sc_tomak_rewards (
+                submission_message_id BIGINT PRIMARY KEY,
+                discord_id            BIGINT NOT NULL,
+                thread_id             BIGINT NOT NULL,
+                awarded_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
         await conn.execute("""

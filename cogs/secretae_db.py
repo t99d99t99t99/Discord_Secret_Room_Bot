@@ -221,6 +221,25 @@ async def grant_story_essence(pool, discord_id: int, message_id: int) -> dict:
             return {"awarded": True, "created_user": created_user, "story_essence_count": count}
 
 
+async def grant_tomak_post_reward(pool, discord_id: int, thread_id: int, message_id: int) -> dict:
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            created_user = await _ensure_game_user_conn(conn, discord_id)
+            inserted = await conn.fetchval(
+                "INSERT INTO sc_tomak_rewards(submission_message_id, discord_id, thread_id) "
+                "VALUES($1, $2, $3) ON CONFLICT (submission_message_id) DO NOTHING RETURNING 1",
+                message_id, discord_id, thread_id,
+            )
+            if inserted != 1:
+                return {"awarded": False, "created_user": created_user}
+            count = await conn.fetchval(
+                "UPDATE sc_users SET story_essence_count = story_essence_count + 1 "
+                "WHERE discord_id = $1 RETURNING story_essence_count",
+                discord_id,
+            )
+            return {"awarded": True, "created_user": created_user, "story_essence_count": count}
+
+
 async def consume_story_essence(pool, discord_id: int) -> bool:
     result = await pool.fetchval(
         "UPDATE sc_users SET story_essence_count = story_essence_count - 1 "
