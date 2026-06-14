@@ -12,6 +12,7 @@ KST = datetime.timezone(datetime.timedelta(hours=9))
 TOMAK_MAX_SUBMISSIONS_PER_THREAD = 10
 TOMAK_MIN_LENGTH = 20
 TOMAK_MAX_LENGTH = 300
+TOMAK_NEW_THREAD_THRESHOLD = 5
 
 
 async def _get_latest_thread(channel) -> discord.Thread | None:
@@ -19,6 +20,16 @@ async def _get_latest_thread(channel) -> discord.Thread | None:
     async for thread in channel.archived_threads(limit=None):
         threads.append(thread)
     return max(threads, key=lambda thread: thread.created_at) if threads else None
+
+
+async def _get_thread_by_id(channel, thread_id: int) -> discord.Thread | None:
+    for thread in channel.threads:
+        if thread.id == thread_id:
+            return thread
+    async for thread in channel.archived_threads(limit=None):
+        if thread.id == thread_id:
+            return thread
+    return None
 
 
 def _channel_detail(channel) -> str:
@@ -166,9 +177,8 @@ class TomakManagement(commands.Cog):
             return True
 
         unposted = await self.bot.db.fetch(
-            "SELECT user_id, message_id, submitted_at FROM tomak_submissions "
-            "WHERE thread_id = $1 AND posted_at IS NULL ORDER BY submitted_at",
-            latest_sub_thread.id,
+            "SELECT thread_id, user_id, message_id, submitted_at FROM tomak_submissions "
+            "WHERE posted_at IS NULL ORDER BY submitted_at",
         )
         if not unposted:
             created_thread = await self._create_tomak_submission_thread(submission_ch, started_at)
@@ -194,15 +204,29 @@ class TomakManagement(commands.Cog):
             priorities.append((last, row["submitted_at"], row["message_id"], row))
         selected = min(priorities, key=lambda item: (item[0], item[1], item[2]))[3]
 
+        source_thread = await _get_thread_by_id(submission_ch, selected["thread_id"])
+        if source_thread is None:
+            await self._send_log_thread_message(
+                "[토막상식 갱신 실패]\n"
+                f"- 실행 방식: {trigger}\n"
+                f"- 실행자: {operator.mention if operator else '시스템'}\n"
+                f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
+                f"- 신청 스레드 ID: `{selected['thread_id']}`\n"
+                f"- 선택된 신청자: <@{selected['user_id']}> (`{selected['user_id']}`)\n"
+                f"- 신청 메시지 ID: `{selected['message_id']}`\n"
+                "- 사유: 선택된 신청 스레드를 찾을 수 없습니다."
+            )
+            return False
+
         try:
-            submission_msg = await latest_sub_thread.fetch_message(selected["message_id"])
+            submission_msg = await source_thread.fetch_message(selected["message_id"])
         except discord.NotFound:
             await self._send_log_thread_message(
                 "[토막상식 갱신 실패]\n"
                 f"- 실행 방식: {trigger}\n"
                 f"- 실행자: {operator.mention if operator else '시스템'}\n"
                 f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
-                f"- 신청 스레드: {latest_sub_thread.mention} (`{latest_sub_thread.id}`, {latest_sub_thread.name})\n"
+                f"- 신청 스레드: {source_thread.mention} (`{source_thread.id}`, {source_thread.name})\n"
                 f"- 선택된 신청자: <@{selected['user_id']}> (`{selected['user_id']}`)\n"
                 f"- 신청 메시지 ID: `{selected['message_id']}`\n"
                 "- 사유: 선택된 신청 메시지를 찾을 수 없습니다."
@@ -219,7 +243,7 @@ class TomakManagement(commands.Cog):
             now_kst, selected["message_id"],
         )
         reward = await grant_tomak_post_reward(
-            self.bot.db, submission_msg.author.id, latest_sub_thread.id, submission_msg.id,
+            self.bot.db, submission_msg.author.id, source_thread.id, submission_msg.id,
         )
         if reward.get("awarded"):
             try:
@@ -227,14 +251,13 @@ class TomakManagement(commands.Cog):
             except discord.Forbidden:
                 pass
 
-        await self._update_management_message(mgmt_thread, latest_sub_thread.id, latest_sub_thread.name)
+        await self._update_management_message(mgmt_thread, source_thread.id, source_thread.name)
 
         remaining = await self.bot.db.fetchval(
-            "SELECT COUNT(*) FROM tomak_submissions WHERE thread_id = $1 AND posted_at IS NULL",
-            latest_sub_thread.id,
+            "SELECT COUNT(*) FROM tomak_submissions WHERE posted_at IS NULL",
         )
         created_submission_thread = None
-        if remaining == 0:
+        if remaining < TOMAK_NEW_THREAD_THRESHOLD and latest_sub_thread.id == source_thread.id:
             created_submission_thread = await self._create_tomak_submission_thread(submission_ch, now_kst)
 
         await self._send_log_thread_message(
@@ -243,7 +266,7 @@ class TomakManagement(commands.Cog):
             f"- 실행자: {operator.mention if operator else '시스템'}\n"
             f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
             f"- 완료 시각: {datetime.datetime.now(KST):%Y-%m-%d %H:%M:%S KST}\n"
-            f"- 신청 스레드: {latest_sub_thread.mention} (`{latest_sub_thread.id}`, {latest_sub_thread.name})\n"
+            f"- 신청 스레드: {source_thread.mention} (`{source_thread.id}`, {source_thread.name})\n"
             f"- 게시 대상자: {submission_msg.author.mention} (`{submission_msg.author.id}`)\n"
             f"- 신청 메시지: `{submission_msg.id}`\n"
             f"- 게시 제목: **{title}**\n"
