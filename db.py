@@ -133,4 +133,13 @@ async def init_pool(dsn: str) -> asyncpg.Pool:
                         user["discord_id"], slot, {"type": "Empty", "rank": 0},
                     )
             await conn.execute("INSERT INTO sc_migrations(version) VALUES(2)")
+        if 3 not in applied:
+            for table in ("kyohoon_submissions", "tomak_submissions"):
+                await conn.execute(
+                    f"ALTER TABLE {table} "
+                    "ADD COLUMN IF NOT EXISTS publishing_at TIMESTAMPTZ, "
+                    "ADD COLUMN IF NOT EXISTS publication_marker TEXT, "
+                    "ADD COLUMN IF NOT EXISTS publication_thread_id BIGINT"
+                )
+            await conn.execute("INSERT INTO sc_migrations(version) VALUES(3)")
     return pool
