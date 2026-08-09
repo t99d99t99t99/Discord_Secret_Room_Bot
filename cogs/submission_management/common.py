@@ -64,9 +64,30 @@ def publication_content(content: str, marker: str) -> str:
 
 
 async def find_publication(notify_ch, marker: str):
-    async for message in notify_ch.history(limit=None, oldest_first=False):
-        if marker in message.content:
-            return message.thread.id if message.thread else None
+    """Return the thread containing a publication marker, if it exists.
+
+    Forum channels do not expose ``history``.  A forum post is instead a
+    thread whose starter message has the same ID as the thread, so search the
+    starter messages of both active and archived posts in that case.
+    """
+    history = getattr(notify_ch, "history", None)
+    if callable(history):
+        async for message in history(limit=None, oldest_first=False):
+            if marker in message.content:
+                return message.thread.id if message.thread else None
+        return None
+
+    threads = {thread.id: thread for thread in notify_ch.threads}
+    async for thread in notify_ch.archived_threads(limit=None):
+        threads.setdefault(thread.id, thread)
+
+    for thread in sorted(threads.values(), key=lambda item: item.created_at, reverse=True):
+        try:
+            starter_message = await thread.fetch_message(thread.id)
+        except discord.NotFound:
+            continue
+        if marker in starter_message.content:
+            return thread.id
     return None
 
 
