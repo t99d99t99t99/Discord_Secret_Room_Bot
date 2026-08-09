@@ -11,8 +11,9 @@ from .common import (
     created_thread as _created_thread,
     get_channel as _get_channel,
     get_latest_bot_thread as _get_latest_thread,
-    recover_or_publish,
+    schedule_update_enabled,
     SubmissionManagementCog,
+    toggle_schedule_update,
 )
 
 def _week_of_month(date: datetime.date) -> int:
@@ -64,6 +65,8 @@ class KyohoonManagement(SubmissionManagementCog):
     @tasks.loop(time=datetime.time(22, 30, tzinfo=KST))
     async def update_Kyohoon(self):
         if datetime.datetime.now(KST).weekday() != 6:
+            return
+        if not await schedule_update_enabled(self.bot.db, "kyohoon"):
             return
 
         await self._execute_kyohoon_update("자동", None)
@@ -124,7 +127,7 @@ class KyohoonManagement(SubmissionManagementCog):
 
         # 미게시 신청 목록 조회
         unposted = await self.bot.db.fetch(
-            "SELECT user_id, message_id, publication_marker FROM kyohoon_submissions "
+            "SELECT user_id, message_id FROM kyohoon_submissions "
             "WHERE thread_id = $1 AND posted_at IS NULL ORDER BY submitted_at",
             latest_sub_thread.id
         )
@@ -182,19 +185,30 @@ class KyohoonManagement(SubmissionManagementCog):
         now_kst = datetime.datetime.now(KST)
         week  = _week_of_month(now_kst.date())
         title = f"{now_kst.month}월 {week}주차, {submission_msg.author.display_name}"
-        publication_thread_id = await recover_or_publish(
-            self.bot.db, "kyohoon_submissions", selected, notify_ch, title, submission_msg,
+        files = [await attachment.to_file() for attachment in submission_msg.attachments]
+        created = await notify_ch.create_thread(
+            name=title,
+            content=submission_msg.content,
+            files=files,
         )
-        if publication_thread_id is None:
-            return False
+        publication_thread = _created_thread(created)
 
         # DB 갱신 및 관리 메시지 표시 갱신
-        await self.bot.db.execute(
-            "UPDATE kyohoon_submissions "
-            "SET posted_at = $1, publishing_at = NULL, publication_thread_id = $2 "
-            "WHERE message_id = $3",
-            now_kst, publication_thread_id, selected['message_id']
-        )
+        try:
+            await self.bot.db.execute(
+                "UPDATE kyohoon_submissions SET posted_at = $1 WHERE message_id = $2",
+                now_kst, selected['message_id'],
+            )
+        except Exception as exc:
+            await self._send_log_thread_message(
+                "[교훈 DB 갱신 실패]\n"
+                "- Discord 게시물은 생성되었지만 DB 게시 상태를 저장하지 못했습니다.\n"
+                f"- 신청 메시지: `{selected['message_id']}`\n"
+                f"- 생성된 게시 스레드: {publication_thread.mention} (`{publication_thread.id}`)\n"
+                "- 다음 갱신 전에 DB 상태를 수동으로 확인해 주세요.\n"
+                f"- 사유: `{type(exc).__name__}: {exc}`"
+            )
+            return False
         try:
             await self._update_management_message(mgmt_thread, latest_sub_thread.id, latest_sub_thread.name)
         except discord.HTTPException as exc:
@@ -246,7 +260,7 @@ class KyohoonManagement(SubmissionManagementCog):
 
     async def _handle_force_operation(self, message) -> bool:
         command = message.content.strip()
-        if command not in ("!force_update", "!force_submission"):
+        if command not in ("!force_update", "!force_submission", "!toggle_kyohoon"):
             return False
 
         force_thread = self._get_configured_channel("FORCE_OPERATION_ID")
@@ -254,6 +268,17 @@ class KyohoonManagement(SubmissionManagementCog):
             return True
         if not self._has_admin_role(message.author):
             await message.channel.send("이 명령어를 실행할 권한이 없습니다.")
+            return True
+
+        if command == "!toggle_kyohoon":
+            enabled = await toggle_schedule_update(self.bot.db, "kyohoon")
+            state = "활성화" if enabled else "비활성화"
+            await message.channel.send(f"교훈 정기 갱신을 {state}했습니다.")
+            await self._send_log_thread_message(
+                "[교훈 정기 갱신 설정 변경]\n"
+                f"- 실행자: {message.author.mention}\n"
+                f"- 변경 결과: {state}"
+            )
             return True
 
         if command == "!force_update":

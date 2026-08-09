@@ -42,6 +42,18 @@ async def init_pool(dsn: str) -> asyncpg.Pool:
             )
         """)
         await conn.execute("""
+            CREATE TABLE IF NOT EXISTS submission_schedule_settings (
+                schedule_name TEXT PRIMARY KEY,
+                enabled       BOOLEAN NOT NULL DEFAULT TRUE,
+                updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            INSERT INTO submission_schedule_settings(schedule_name, enabled)
+            VALUES ('kyohoon', TRUE), ('tomak', TRUE)
+            ON CONFLICT (schedule_name) DO NOTHING
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS sc_users (
                 discord_id         BIGINT PRIMARY KEY,
                 last_produced_date DATE
@@ -133,13 +145,13 @@ async def init_pool(dsn: str) -> asyncpg.Pool:
                         user["discord_id"], slot, {"type": "Empty", "rank": 0},
                     )
             await conn.execute("INSERT INTO sc_migrations(version) VALUES(2)")
-        if 3 not in applied:
+        if 4 not in applied:
             for table in ("kyohoon_submissions", "tomak_submissions"):
                 await conn.execute(
                     f"ALTER TABLE {table} "
-                    "ADD COLUMN IF NOT EXISTS publishing_at TIMESTAMPTZ, "
-                    "ADD COLUMN IF NOT EXISTS publication_marker TEXT, "
-                    "ADD COLUMN IF NOT EXISTS publication_thread_id BIGINT"
+                    "DROP COLUMN IF EXISTS publishing_at, "
+                    "DROP COLUMN IF EXISTS publication_marker, "
+                    "DROP COLUMN IF EXISTS publication_thread_id"
                 )
-            await conn.execute("INSERT INTO sc_migrations(version) VALUES(3)")
+            await conn.execute("INSERT INTO sc_migrations(version) VALUES(4)")
     return pool

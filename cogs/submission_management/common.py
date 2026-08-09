@@ -7,6 +7,7 @@ from discord.ext import commands
 
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
+SCHEDULE_NAMES = {"kyohoon", "tomak"}
 
 
 async def get_latest_bot_thread(channel, bot_user_id: int) -> discord.Thread | None:
@@ -55,71 +56,29 @@ def created_thread(result):
     return result.thread if hasattr(result, "thread") else result
 
 
-def publication_marker(message_id: int) -> str:
-    return f"||관리 ID: {message_id}||"
+def _validate_schedule_name(schedule_name: str):
+    if schedule_name not in SCHEDULE_NAMES:
+        raise ValueError(f"Unsupported submission schedule: {schedule_name}")
 
 
-def publication_content(content: str, marker: str) -> str:
-    return f"{marker}\n{content[:2000 - len(marker) - 1]}"
+async def schedule_update_enabled(db, schedule_name: str) -> bool:
+    _validate_schedule_name(schedule_name)
+    enabled = await db.fetchval(
+        "SELECT enabled FROM submission_schedule_settings WHERE schedule_name = $1",
+        schedule_name,
+    )
+    return True if enabled is None else enabled
 
 
-async def find_publication(notify_ch, marker: str):
-    """Return the thread containing a publication marker, if it exists.
-
-    Forum channels do not expose ``history``.  A forum post is instead a
-    thread whose starter message has the same ID as the thread, so search the
-    starter messages of both active and archived posts in that case.
-    """
-    history = getattr(notify_ch, "history", None)
-    if callable(history):
-        async for message in history(limit=None, oldest_first=False):
-            if marker in message.content:
-                return message.thread.id if message.thread else None
-        return None
-
-    threads = {thread.id: thread for thread in notify_ch.threads}
-    async for thread in notify_ch.archived_threads(limit=None):
-        threads.setdefault(thread.id, thread)
-
-    for thread in sorted(threads.values(), key=lambda item: item.created_at, reverse=True):
-        try:
-            starter_message = await thread.fetch_message(thread.id)
-        except discord.NotFound:
-            continue
-        if marker in starter_message.content:
-            return thread.id
-    return None
-
-
-async def claim_publication(db, table: str, message_id: int, marker: str):
-    if table not in {"kyohoon_submissions", "tomak_submissions"}:
-        raise ValueError(f"Unsupported submission table: {table}")
+async def toggle_schedule_update(db, schedule_name: str) -> bool:
+    _validate_schedule_name(schedule_name)
     return await db.fetchval(
-        f"UPDATE {table} "
-        "SET publication_marker = $1, publishing_at = COALESCE(publishing_at, NOW()) "
-        "WHERE message_id = $2 AND posted_at IS NULL RETURNING message_id",
-        marker, message_id,
+        "INSERT INTO submission_schedule_settings(schedule_name, enabled) VALUES($1, FALSE) "
+        "ON CONFLICT (schedule_name) DO UPDATE "
+        "SET enabled = NOT submission_schedule_settings.enabled, updated_at = NOW() "
+        "RETURNING enabled",
+        schedule_name,
     )
-
-
-async def recover_or_publish(db, table: str, selected, notify_ch, title: str, submission_msg):
-    """Return the destination thread ID, recovering a post made before a DB failure."""
-    marker = selected["publication_marker"] or publication_marker(selected["message_id"])
-    claimed = await claim_publication(db, table, selected["message_id"], marker)
-    if claimed is None:
-        return None
-
-    publication_thread_id = await find_publication(notify_ch, marker)
-    if publication_thread_id is not None:
-        return publication_thread_id
-
-    files = [await attachment.to_file() for attachment in submission_msg.attachments]
-    created = await notify_ch.create_thread(
-        name=title,
-        content=publication_content(submission_msg.content, marker),
-        files=files,
-    )
-    return created_thread(created).id
 
 
 def has_admin_role(member) -> bool:

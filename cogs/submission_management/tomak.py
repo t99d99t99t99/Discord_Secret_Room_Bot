@@ -14,8 +14,9 @@ from .common import (
     get_bot_thread_by_id as _get_thread_by_id,
     get_channel as _get_channel,
     get_latest_bot_thread as _get_latest_thread,
-    recover_or_publish,
+    schedule_update_enabled,
     SubmissionManagementCog,
+    toggle_schedule_update,
 )
 TOMAK_MAX_SUBMISSIONS_PER_THREAD = 10
 TOMAK_MIN_LENGTH = 20
@@ -95,6 +96,8 @@ class TomakManagement(SubmissionManagementCog):
 
     @tasks.loop(time=datetime.time(23, 30, tzinfo=KST))
     async def update_Tomak(self):
+        if not await schedule_update_enabled(self.bot.db, "tomak"):
+            return
         await self._execute_tomak_update("자동", None)
 
     @update_Tomak.before_loop
@@ -158,7 +161,7 @@ class TomakManagement(SubmissionManagementCog):
             return True
 
         unposted = await self.bot.db.fetch(
-            "SELECT thread_id, user_id, message_id, submitted_at, publication_marker "
+            "SELECT thread_id, user_id, message_id, submitted_at "
             "FROM tomak_submissions "
             "WHERE posted_at IS NULL ORDER BY submitted_at",
         )
@@ -236,18 +239,29 @@ class TomakManagement(SubmissionManagementCog):
 
         now_kst = datetime.datetime.now(KST)
         title = _tomak_post_title(now_kst, submission_msg.author.display_name)
-        publication_thread_id = await recover_or_publish(
-            self.bot.db, "tomak_submissions", selected, notify_ch, title, submission_msg,
+        files = [await attachment.to_file() for attachment in submission_msg.attachments]
+        created = await notify_ch.create_thread(
+            name=title,
+            content=submission_msg.content,
+            files=files,
         )
-        if publication_thread_id is None:
-            return False
+        publication_thread = _created_thread(created)
 
-        await self.bot.db.execute(
-            "UPDATE tomak_submissions "
-            "SET posted_at = $1, publishing_at = NULL, publication_thread_id = $2 "
-            "WHERE message_id = $3",
-            now_kst, publication_thread_id, selected["message_id"],
-        )
+        try:
+            await self.bot.db.execute(
+                "UPDATE tomak_submissions SET posted_at = $1 WHERE message_id = $2",
+                now_kst, selected["message_id"],
+            )
+        except Exception as exc:
+            await self._send_log_thread_message(
+                "[토막상식 DB 갱신 실패]\n"
+                "- Discord 게시물은 생성되었지만 DB 게시 상태를 저장하지 못했습니다.\n"
+                f"- 신청 메시지: `{selected['message_id']}`\n"
+                f"- 생성된 게시 스레드: {publication_thread.mention} (`{publication_thread.id}`)\n"
+                "- 다음 갱신 전에 DB 상태를 수동으로 확인해 주세요.\n"
+                f"- 사유: `{type(exc).__name__}: {exc}`"
+            )
+            return False
         reward = await grant_tomak_post_reward(
             self.bot.db, submission_msg.author.id, source_thread.id, submission_msg.id,
         )
@@ -301,7 +315,7 @@ class TomakManagement(SubmissionManagementCog):
 
     async def _handle_force_operation(self, message) -> bool:
         command = message.content.strip()
-        if command not in ("!force_tomak_update", "!force_tomak_submission"):
+        if command not in ("!force_tomak_update", "!force_tomak_submission", "!toggle_tomak"):
             return False
 
         force_thread = self._get_configured_channel("FORCE_OPERATION_ID")
@@ -309,6 +323,17 @@ class TomakManagement(SubmissionManagementCog):
             return True
         if not self._has_admin_role(message.author):
             await message.channel.send("이 명령어를 실행할 권한이 없습니다.")
+            return True
+
+        if command == "!toggle_tomak":
+            enabled = await toggle_schedule_update(self.bot.db, "tomak")
+            state = "활성화" if enabled else "비활성화"
+            await message.channel.send(f"토막상식 정기 갱신을 {state}했습니다.")
+            await self._send_log_thread_message(
+                "[토막상식 정기 갱신 설정 변경]\n"
+                f"- 실행자: {message.author.mention}\n"
+                f"- 변경 결과: {state}"
+            )
             return True
 
         if command == "!force_tomak_update":
