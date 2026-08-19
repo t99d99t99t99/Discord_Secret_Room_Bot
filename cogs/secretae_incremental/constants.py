@@ -61,3 +61,5 @@ KOREAN_NAMES = MappingProxyType(
 )
 INITIAL_SECRETS = 100
 INITIAL_ORGANICS = 1
+
+SHARD_SYMBOL = "✨"  # 빛나는 파편

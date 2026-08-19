@@ -195,7 +195,7 @@ def quote_synthesis(state, key, amount):
 
 
 async def synthesize(pool, discord_id, key, amount_text):
-    """검증한 한 종류의 비밀 묶음을 원자적으로 구매합니다."""
+    """한 종류의 비밀 묶음을 구매합니다."""
     if not amount_text.isdecimal():
         raise ValueError("수량은 1 이상의 정수여야 합니다.")
     amount = N.of(amount_text)
@@ -230,6 +230,10 @@ async def produce(pool, discord_id):
             if state["player"]["last_produced_game_date"] == today:
                 raise ValueError("오늘은 이미 생산했습니다.")
 
+            before_shards = state["shards"]
+            before_organics = dict(state["organics"])
+            organic_gains = {color: ZERO for color in COLORS}
+            shard_gain = ZERO
             galaxy = milky_way_multiplier(state["total"])
             circle = ONE + state["secrets"][CIRCLE] / N.of(100)
             for color in PRODUCTION_ORDER:
@@ -244,11 +248,13 @@ async def produce(pool, discord_id):
                 gain = gain.ceil()
                 if color == RED:
                     state["shards"] = state["shards"] + gain
+                    shard_gain = gain
                 else:
                     previous_color = COLORS[COLORS.index(color) - 1]
                     state["organics"][previous_color] = (
                         state["organics"][previous_color] + gain
                     )
+                    organic_gains[previous_color] = gain
 
             await conn.execute(
                 "UPDATE si_players SET shards=$2, last_produced_game_date=$3, updated_at=NOW() WHERE discord_id=$1",
@@ -261,7 +267,13 @@ async def produce(pool, discord_id):
                 discord_id,
                 _encode(state["organics"]),
             )
-            return state
+            return state, {
+                "shards": (before_shards, shard_gain),
+                "organics": {
+                    color: (before_organics[color], organic_gains[color])
+                    for color in COLORS
+                },
+            }
 
 
 async def max_synthesize(pool, discord_id):
@@ -271,6 +283,7 @@ async def max_synthesize(pool, discord_id):
             state = await _state(conn, discord_id)
             bought = {key: ZERO for key in SECRETS}
             original_shards = state["shards"]
+            original_secrets = dict(state["secrets"])
 
             for key in MAX_SYNTHESIS_ORDER:
                 # 지수적 범위 확장과 이진 탐색으로 묶음 크기에 대해 로그 시간에 처리합니다.
@@ -312,7 +325,12 @@ async def max_synthesize(pool, discord_id):
                 discord_id,
                 _encode(state["secrets"]),
             )
-            return bought, original_shards - state["shards"], state
+            return state, {
+                "shards": (original_shards, original_shards - state["shards"]),
+                "secrets": {
+                    key: (original_secrets[key], bought[key]) for key in SECRETS
+                },
+            }
 
 
 def concentration_gain(state):
@@ -374,17 +392,17 @@ async def concentrate(pool, discord_id):
                 state["total"].to_json(),
                 state["highest"].to_json(),
             )
-            return gain, new_essence
+            return gain, state["essence"], new_essence
 
 
 async def grant_kyohoon_reward(
     pool, discord_id, source_thread_id, message_id, posted_thread_id
 ):
-    """게시된 교훈 신청에 대해 정수를 한 번 두 배로 늘립니다.
+    """게시된 교훈 신청에 대해 이야기의 정수를 한 번 두 배로 늘립니다. 정수가 0인
+    플레이어에게는 정수 1개를 지급합니다.
 
     멱등성 기록과 모든 자원 변경은 함께 커밋됩니다. 호출자는 신청의
-    ``posted_at`` 갱신이 성공한 뒤에만 이 함수를 호출해야 합니다. 정수가 0인
-    플레이어에게는 정수 1을 지급하므로 첫 보상도 유용합니다.
+    ``posted_at`` 갱신이 성공한 뒤에만 이 함수를 호출해야 합니다. 
     """
     async with pool.acquire() as conn:
         async with conn.transaction():

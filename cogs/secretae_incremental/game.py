@@ -27,32 +27,91 @@ from .db import (
 from .numbers import LayeredDecimal as N, format_amount
 
 
-def _status_text(state):
-    """상태 스냅샷을 한국어 현황 응답으로 렌더링합니다."""
-    rows = [
-        f"**비밀 파편**: {format_amount(state['shards'])}",
-        f"**이야기의 정수**: {format_amount(state['essence'])}",
-    ]
-    rows += [
-        "\n**비밀 유기체**",
-        " · ".join(
+def _status_view(state):
+    """구역 사이에 Discord 구분선을 둔 현황 Components v2 레이아웃입니다."""
+    sections = [
+        "\n".join(
+            (
+                f"**비밀 파편**: {format_amount(state['shards'])}",
+                f"**이야기의 정수**: {format_amount(state['essence'])}",
+            )
+        ),
+        "**비밀 유기체**\n"
+        + " · ".join(
             f"{ORGANIC_SYMBOLS[k]} {format_amount(state['organics'][k])}"
             for k in COLORS
         ),
-    ]
-    rows += [
-        "\n**색 비밀**",
-        " · ".join(
+        "**색 비밀**\n"
+        + " · ".join(
             f"{SYMBOLS[k]} {format_amount(state['secrets'][k])}" for k in COLORS
         ),
-    ]
-    rows += [
-        "\n**형태 비밀**",
-        " · ".join(
+        "**형태 비밀**\n"
+        + " · ".join(
             f"{SYMBOLS[k]} {format_amount(state['secrets'][k])}" for k in SHAPES
         ),
     ]
-    return "\n".join(rows)
+    view = discord.ui.LayoutView(timeout=None)
+    for index, section in enumerate(sections):
+        if index:
+            view.add_item(discord.ui.Separator())
+        view.add_item(discord.ui.TextDisplay(section))
+    return view
+
+
+def _amount_table(rows, change_label):
+    """결과·기존·변화량 열을 이모지와 숫자 폭에 맞춰 정렬합니다."""
+    formatted_rows = [
+        (symbol, *(format_amount(value) for value in values))
+        for symbol, *values in rows
+    ]
+    width = max(
+        len(value)
+        for _, result, before, gain in formatted_rows
+        for value in (result, before, gain)
+    )
+    symbol_width = max(len(symbol) for symbol, *_ in formatted_rows)
+    header = (
+        f"{' ' * (symbol_width + 1)}{'결과'.rjust(width)} "
+        f"← {'기존'.rjust(width)} + {change_label.rjust(width)}"
+    )
+    table = "\n".join(
+        f"{symbol.ljust(symbol_width)} {result.rjust(width)} ← {before.rjust(width)} + {gain.rjust(width)}"
+        for symbol, result, before, gain in formatted_rows
+    )
+    return f"{header}\n{table}"
+
+
+def _production_text(state, production):
+    """생산 전후 및 획득량을 숫자 열이 맞춰진 결과표로 렌더링합니다."""
+    rows = [(SHARD_SYMBOL, state["shards"], *production["shards"])]
+    rows.extend(
+        (
+            ORGANIC_SYMBOLS[color],
+            state["organics"][color],
+            *production["organics"][color],
+        )
+        for color in COLORS
+    )
+    return "\n".join(
+        (
+            "**파편 및 유기체 생산을 완료했습니다!**",
+            f"```\n{_amount_table(rows, '생산')}\n```",
+        )
+    )
+
+
+def _concentration_text(before, gain, after, title):
+    """농축 전후의 이야기 정수를 간결한 변화 행으로 렌더링합니다."""
+    values = [format_amount(value) for value in (after, before, gain)]
+    width = max(len(value) for value in values)
+    return "\n".join(
+        (
+            f"**{title}**",
+            "```",
+            f"이야기의 정수 {values[0].rjust(width)} ← {values[1].rjust(width)} + {values[2].rjust(width)}",
+            "```",
+        )
+    )
 
 
 def _key(value):
@@ -84,12 +143,14 @@ def _price_text(state):
         "**현재 합성 가격**",
         f"비밀 파편: {format_amount(state['shards'])}",
         f"정수 따라잡기 할인: {discount * 100:.0f}% / □ 비용 배율: {square_multiplier.mag:.3f}",
+        "\n**다음 비밀 1개 합성 비용**",
     ]
     for key in SECRETS:
         cost = quote_synthesis(state, key, N.of(1))
-        mark = "가능" if state["shards"].is_affordable(cost) else "부족"
+        mark = "구매 가능" if state["shards"].is_affordable(cost) else "파편 부족"
         lines.append(
-            f"{SYMBOLS[key]} {format_amount(state['secrets'][key])} → {format_amount(cost)} ({mark})"
+            f"{SYMBOLS[key]} 보유 {format_amount(state['secrets'][key])}개 / "
+            f"비용: {format_amount(cost)} 비밀 파편 ({mark})"
         )
     lines.extend(
         [
@@ -218,7 +279,7 @@ class SecretaeIncremental(commands.Cog):
     async def status(self, interaction: discord.Interaction):
         """호출자의 현재 게임 자원을 보여 줍니다."""
         state = await get_status(self.bot.db, interaction.user.id)
-        await interaction.response.send_message(_status_text(state))
+        await interaction.response.send_message(view=_status_view(state))
         report = await get_unacknowledged_migration_report(
             self.bot.db, interaction.user.id
         )
@@ -232,10 +293,8 @@ class SecretaeIncremental(commands.Cog):
     async def production(self, interaction: discord.Interaction):
         """하루 생산을 한 번 실행합니다."""
         try:
-            state = await produce(self.bot.db, interaction.user.id)
-            await interaction.response.send_message(
-                f"생산을 완료했습니다. 비밀 파편: **{format_amount(state['shards'])}**"
-            )
+            state, summary = await produce(self.bot.db, interaction.user.id)
+            await interaction.response.send_message(_production_text(state, summary))
         except ValueError as error:
             await self._error(interaction, error)
 
@@ -273,23 +332,30 @@ class SecretaeIncremental(commands.Cog):
         name="최대합성", description="우선순위에 따라 가능한 비밀을 최대 합성합니다."
     )
     async def maximum_synthesis(self, interaction: discord.Interaction):
-        """문서화된 엄격한 비밀 우선순위로 파편을 사용합니다."""
+        """비밀 우선순위에 따라 파편을 가능한 만큼 사용합니다."""
         try:
-            bought, spent, state = await max_synthesize(
-                self.bot.db, interaction.user.id
-            )
-            details = " · ".join(
-                f"{SYMBOLS[k]} {format_amount(v)}" for k, v in bought.items() if v.sign
-            )
+            state, summary = await max_synthesize(self.bot.db, interaction.user.id)
+            rows = [
+                (SYMBOLS[key], state["secrets"][key], *summary["secrets"][key])
+                for key in SECRETS
+                if summary["secrets"][key][1].sign
+            ]
             await interaction.response.send_message(
-                f"최대 합성을 완료했습니다. {details}\n사용: {format_amount(spent)} / 남음: {format_amount(state['shards'])}"
+                "\n".join(
+                    (
+                        "**최대 합성을 완료했습니다!**",
+                        f"```\n{_amount_table(rows, '합성')}\n```",
+                        f"{SHARD_SYMBOL} 사용: {format_amount(summary['shards'][1])} / "
+                        f"남음: {format_amount(state['shards'])}",
+                    )
+                )
             )
         except ValueError as error:
             await self._error(interaction, error)
 
     @game.command(name="농축", description="초기화하고 이야기의 정수를 얻습니다.")
     async def concentration(self, interaction: discord.Interaction):
-        """자원을 예약하지 않는 개인용 농축 확인창을 보여 줍니다."""
+        """개인용 농축 확인창을 보여 줍니다."""
         state = await get_status(self.bot.db, interaction.user.id)
         if not concentration_available(state):
             return await self._error(
@@ -304,7 +370,8 @@ class SecretaeIncremental(commands.Cog):
 
         view = ConcentrationView(self, interaction.user.id)
         await interaction.response.send_message(
-            f"예상 획득 정수: **{format_amount(gain)}**\n비밀 파편, 유기체, 모든 비밀이 초기화됩니다.",
+            f"{_concentration_text(state['essence'], gain, state['essence'] + gain, '농축 예정')}\n"
+            "비밀 파편, 유기체, 모든 비밀이 초기화됩니다.",
             ephemeral=True,
             view=view,
         )
@@ -347,10 +414,10 @@ class ConcentrationView(discord.ui.View):
     async def confirm(self, interaction, button):
         """사용자 확인 후 농축을 다시 계산하고 커밋합니다."""
         try:
-            gain, total = await concentrate(self.cog.bot.db, interaction.user.id)
+            gain, before, after = await concentrate(self.cog.bot.db, interaction.user.id)
             self.stop()
             await interaction.response.send_message(
-                f"농축을 완료했습니다. 이야기의 정수 **{format_amount(gain)}**을 얻었습니다. (총 {format_amount(total)})",
+                _concentration_text(before, gain, after, "농축을 완료했습니다!"),
                 ephemeral=False,
             )
         except ValueError as error:
