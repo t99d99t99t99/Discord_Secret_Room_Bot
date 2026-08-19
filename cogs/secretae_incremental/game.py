@@ -3,6 +3,7 @@
 from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
+import os
 import discord
 import yaml
 from discord import app_commands
@@ -127,6 +128,7 @@ class SecretaeIncremental(commands.Cog):
     def __init__(self, bot):
         """도메인 계층에서 사용하는 봇 참조를 보관합니다."""
         self.bot = bot
+        self._commands_synced = False
         with open("assets/message.yaml", encoding="utf-8") as message_file:
             self._help_message = yaml.safe_load(message_file)["help"][
                 "secretae_incremental"
@@ -136,6 +138,17 @@ class SecretaeIncremental(commands.Cog):
     def cog_unload(self):
         """코그가 내려갈 때 시간별 알림 스케줄러를 중지합니다."""
         self.send_game_alerts.cancel()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """현재 명령 트리를 서버에 동기화해 기존 게임 명령을 교체합니다."""
+        if self._commands_synced:
+            return
+
+        guild = discord.Object(id=int(os.environ["SECRET_ROOM_SERVER_ID"]))
+        self.bot.tree.copy_global_to(guild=guild)
+        await self.bot.tree.sync(guild=guild)
+        self._commands_synced = True
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """모든 /게임 호출을 일일 게임 활동으로 처리합니다."""
