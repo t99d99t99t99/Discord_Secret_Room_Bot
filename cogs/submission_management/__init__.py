@@ -1,1 +1,1 @@
-"""Shared infrastructure for Kyohoon and Tomak submission management."""
+"""교훈 및 토막상식 신청 관리를 위한 공통 기반 기능입니다."""

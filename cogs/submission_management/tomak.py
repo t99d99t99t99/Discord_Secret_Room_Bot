@@ -6,7 +6,13 @@ import discord
 import yaml
 from discord.ext import commands, tasks
 
-from ..secretae_db import grant_tomak_post_reward
+from ..secretae_incremental.constants import SECRETS, SYMBOLS
+from ..secretae_incremental.db import (
+    grant_tomak_reward,
+    mark_submission_rewarded,
+    retry_pending_submission_rewards,
+)
+from ..secretae_incremental.numbers import LayeredDecimal, format_amount
 from .common import (
     KST,
     channel_detail as _channel_detail,
@@ -61,6 +67,8 @@ class TomakManagement(SubmissionManagementCog):
             return
         self._synced = True
 
+        await self._retry_pending_rewards("시작")
+
         submission_ch = self._get_configured_channel("TOMAK_SUBMISSION_ID")
         if submission_ch is None:
             return
@@ -98,7 +106,20 @@ class TomakManagement(SubmissionManagementCog):
     async def update_Tomak(self):
         if not await schedule_update_enabled(self.bot.db, "tomak"):
             return
+        await self._retry_pending_rewards("정기")
         await self._execute_tomak_update("자동", None)
+
+    async def _retry_pending_rewards(self, trigger: str):
+        summary = await retry_pending_submission_rewards(self.bot.db, "tomak")
+        if summary["awarded"] or summary["already_awarded"] or summary["failed"]:
+            await self._send_log_thread_message(
+                "[토막상식 보상 재시도]\n"
+                f"- 실행 방식: {trigger}\n"
+                f"- 새 지급: {summary['awarded']}건\n"
+                f"- 기존 지급 확인: {summary['already_awarded']}건\n"
+                f"- 실패: {len(summary['failed'])}건"
+            )
+        return summary
 
     @update_Tomak.before_loop
     async def before_update_Tomak(self):
@@ -249,8 +270,9 @@ class TomakManagement(SubmissionManagementCog):
 
         try:
             await self.bot.db.execute(
-                "UPDATE tomak_submissions SET posted_at = $1 WHERE message_id = $2",
-                now_kst, selected["message_id"],
+                "UPDATE tomak_submissions SET posted_at = $1, reward_posted_thread_id = $2, "
+                "rewarded_at = NULL WHERE message_id = $3",
+                now_kst, publication_thread.id, selected["message_id"],
             )
         except Exception as exc:
             await self._send_log_thread_message(
@@ -262,14 +284,29 @@ class TomakManagement(SubmissionManagementCog):
                 f"- 사유: `{type(exc).__name__}: {exc}`"
             )
             return False
-        reward = await grant_tomak_post_reward(
-            self.bot.db, submission_msg.author.id, source_thread.id, submission_msg.id,
+        reward = await grant_tomak_reward(
+            self.bot.db,
+            submission_msg.author.id,
+            source_thread.id,
+            submission_msg.id,
+            publication_thread.id,
         )
-        if reward.get("awarded"):
+        if reward["awarded"] or reward.get("already_awarded"):
+            await mark_submission_rewarded(self.bot.db, "tomak", submission_msg.id)
+        if reward["awarded"]:
+            reward_message = self._format_tomak_reward(reward)
             try:
-                await submission_msg.author.send(self._format_tomak_reward_dm(reward))
-            except discord.Forbidden:
-                pass
+                await submission_msg.author.send(reward_message)
+            except discord.HTTPException as exc:
+                await self._send_log_thread_message(
+                    f"[토막상식 보상 DM 실패] 신청 메시지 `{submission_msg.id}`: {type(exc).__name__}: {exc}"
+                )
+            try:
+                await publication_thread.send(reward_message)
+            except discord.HTTPException as exc:
+                await self._send_log_thread_message(
+                    f"[토막상식 보상 게시 알림 실패] 신청 메시지 `{submission_msg.id}`: {type(exc).__name__}: {exc}"
+                )
 
         try:
             await self._update_management_message(mgmt_thread, source_thread.id, source_thread.name)
@@ -658,13 +695,15 @@ class TomakManagement(SubmissionManagementCog):
             thread_id, new_msg.id,
         )
 
-    def _format_tomak_reward_dm(self, reward: dict) -> str:
-        lines = [
-            "신청하신 토막상식이 게시되어 **이야기의 정수** 1개를 얻었습니다.",
-        ]
-        if reward.get("created_user"):
-            lines.append("시크리타이 게임 기록이 없어 기본 계정을 함께 생성했습니다.")
-        lines.append(f"현재 보유한 이야기의 정수: {reward['story_essence_count']}개")
+    def _format_tomak_reward(self, reward: dict) -> str:
+        """커밋된 비밀별 토막상식 보상을 DM과 스레드용으로 렌더링합니다."""
+        before = reward["before"]
+        after = reward["after"]
+        lines = ["토막상식이 게시되어 모든 비밀이 1.05배가 되었습니다."]
+        for key in SECRETS:
+            old = format_amount(LayeredDecimal.from_json(before[key]))
+            new = format_amount(LayeredDecimal.from_json(after[key]))
+            lines.append(f"{SYMBOLS[key]} {old} → {new}")
         return "\n".join(lines)
 
 

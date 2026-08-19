@@ -4,7 +4,13 @@ from discord.ext import commands, tasks
 import datetime
 import traceback
 import yaml
-from ..secretae_db import COLOR_NAMES, SHAPE_NAMES, grant_kyohoon_submission_reward
+from ..secretae_incremental.db import (
+    get_submission_reward,
+    grant_kyohoon_reward,
+    mark_submission_rewarded,
+    retry_pending_submission_rewards,
+)
+from ..secretae_incremental.numbers import LayeredDecimal, format_amount
 from .common import (
     KST,
     channel_detail as _channel_detail,
@@ -42,6 +48,8 @@ class KyohoonManagement(SubmissionManagementCog):
             return
         self._synced = True
 
+        await self._retry_pending_rewards("시작")
+
         submission_ch = self._get_configured_channel("KYOHOON_SUBMISSION_ID")
         if submission_ch is None:
             return
@@ -69,7 +77,20 @@ class KyohoonManagement(SubmissionManagementCog):
         if not await schedule_update_enabled(self.bot.db, "kyohoon"):
             return
 
+        await self._retry_pending_rewards("정기")
         await self._execute_kyohoon_update("자동", None)
+
+    async def _retry_pending_rewards(self, trigger: str):
+        summary = await retry_pending_submission_rewards(self.bot.db, "kyohoon")
+        if summary["awarded"] or summary["already_awarded"] or summary["failed"]:
+            await self._send_log_thread_message(
+                "[교훈 보상 재시도]\n"
+                f"- 실행 방식: {trigger}\n"
+                f"- 새 지급: {summary['awarded']}건\n"
+                f"- 기존 지급 확인: {summary['already_awarded']}건\n"
+                f"- 실패: {len(summary['failed'])}건"
+            )
+        return summary
 
     async def _execute_kyohoon_update(self, trigger: str, operator, raise_errors: bool = True) -> bool:
         started_at = datetime.datetime.now(KST)
@@ -196,8 +217,9 @@ class KyohoonManagement(SubmissionManagementCog):
         # DB 갱신 및 관리 메시지 표시 갱신
         try:
             await self.bot.db.execute(
-                "UPDATE kyohoon_submissions SET posted_at = $1 WHERE message_id = $2",
-                now_kst, selected['message_id'],
+                "UPDATE kyohoon_submissions SET posted_at = $1, reward_posted_thread_id = $2, "
+                "rewarded_at = NULL WHERE message_id = $3",
+                now_kst, publication_thread.id, selected['message_id'],
             )
         except Exception as exc:
             await self._send_log_thread_message(
@@ -209,6 +231,30 @@ class KyohoonManagement(SubmissionManagementCog):
                 f"- 사유: `{type(exc).__name__}: {exc}`"
             )
             return False
+
+        reward = await grant_kyohoon_reward(
+            self.bot.db,
+            submission_msg.author.id,
+            latest_sub_thread.id,
+            submission_msg.id,
+            publication_thread.id,
+        )
+        if reward["awarded"] or reward.get("already_awarded"):
+            await mark_submission_rewarded(self.bot.db, "kyohoon", submission_msg.id)
+        if reward["awarded"]:
+            reward_message = self._format_kyohoon_reward(reward)
+            try:
+                await submission_msg.author.send(reward_message)
+            except discord.HTTPException as exc:
+                await self._send_log_thread_message(
+                    f"[교훈 보상 DM 실패] 신청 메시지 `{submission_msg.id}`: {type(exc).__name__}: {exc}"
+                )
+            try:
+                await publication_thread.send(reward_message)
+            except discord.HTTPException as exc:
+                await self._send_log_thread_message(
+                    f"[교훈 보상 게시 알림 실패] 신청 메시지 `{submission_msg.id}`: {type(exc).__name__}: {exc}"
+                )
         try:
             await self._update_management_message(mgmt_thread, latest_sub_thread.id, latest_sub_thread.name)
         except discord.HTTPException as exc:
@@ -236,6 +282,7 @@ class KyohoonManagement(SubmissionManagementCog):
             f"- 신청 메시지: `{submission_msg.id}`\n"
             f"- 게시 제목: **{title}**\n"
             f"- 첨부파일 수: {len(submission_msg.attachments)}개\n"
+            f"- 보상 지급: {'예' if reward['awarded'] else '아니오'}\n"
             f"- 남은 미게시 신청: {remaining}개\n"
             f"- 새 신청 스레드 생성: {created_submission_thread.mention if created_submission_thread else '아니오'}"
         )
@@ -260,7 +307,10 @@ class KyohoonManagement(SubmissionManagementCog):
 
     async def _handle_force_operation(self, message) -> bool:
         command = message.content.strip()
-        if command not in ("!force_update", "!force_submission", "!toggle_kyohoon"):
+        if not (
+            command in ("!force_update", "!force_submission", "!toggle_kyohoon", "!force_reward")
+            or command.startswith("!reward_lookup ")
+        ):
             return False
 
         force_thread = self._get_configured_channel("FORCE_OPERATION_ID")
@@ -268,6 +318,48 @@ class KyohoonManagement(SubmissionManagementCog):
             return True
         if not self._has_admin_role(message.author):
             await message.channel.send("이 명령어를 실행할 권한이 없습니다.")
+            return True
+
+        if command == "!force_reward":
+            summary = await retry_pending_submission_rewards(self.bot.db)
+            failed = "\n".join(
+                f"- {kind} `{message_id}`: {reason}"
+                for kind, message_id, reason in summary["failed"]
+            )
+            await message.channel.send(
+                "보상 재시도를 완료했습니다.\n"
+                f"- 새 지급: {summary['awarded']}건\n"
+                f"- 기존 지급 확인: {summary['already_awarded']}건\n"
+                f"- 실패: {len(summary['failed'])}건"
+                + (f"\n{failed}" if failed else "")
+            )
+            await self._send_log_thread_message(
+                "[보상 강제 재시도]\n"
+                f"- 실행자: {message.author.mention}\n"
+                f"- 새 지급: {summary['awarded']}건\n"
+                f"- 기존 지급 확인: {summary['already_awarded']}건\n"
+                f"- 실패: {len(summary['failed'])}건"
+            )
+            return True
+
+        if command.startswith("!reward_lookup "):
+            message_id = command.removeprefix("!reward_lookup ").strip()
+            if not message_id.isdecimal():
+                await message.channel.send("메시지 ID는 숫자로 입력해 주세요.")
+                return True
+            reward = await get_submission_reward(self.bot.db, int(message_id))
+            if reward is None:
+                await message.channel.send("해당 메시지 ID의 증분형 게임 보상 기록이 없습니다.")
+                return True
+            await message.channel.send(
+                "[증분형 보상 조회]\n"
+                f"- 종류: {reward['reward_type']}\n"
+                f"- 신청 메시지: `{reward['message_id']}`\n"
+                f"- 사용자: <@{reward['discord_id']}>\n"
+                f"- 원본 스레드: `{reward['source_thread_id']}`\n"
+                f"- 게시 스레드: `{reward['posted_thread_id']}`\n"
+                f"- 지급 시각: {reward['posted_at']}"
+            )
             return True
 
         if command == "!toggle_kyohoon":
@@ -406,15 +498,6 @@ class KyohoonManagement(SubmissionManagementCog):
         )
         if mgmt_thread:
             await self._update_management_message(mgmt_thread, message.channel.id, message.channel.name)
-        reward = await grant_kyohoon_submission_reward(
-            self.bot.db, author.id, message.channel.id, message.id,
-        )
-        if reward.get("awarded"):
-            try:
-                await author.send(self._format_kyohoon_reward_dm(reward))
-            except discord.Forbidden:
-                pass
-
     # ------------------------------------------------------------------ #
     # 신청 메시지 수정/삭제 감지
     # ------------------------------------------------------------------ #
@@ -536,23 +619,16 @@ class KyohoonManagement(SubmissionManagementCog):
             thread_id, new_msg.id
         )
 
-    def _format_kyohoon_reward_dm(self, reward: dict) -> str:
-        summary = reward["summary"]
-        lines = [
-            "교훈 신청이 등록되어 시크리타이 보상을 받았습니다.",
-            f"보유한 모든 공장에서 각각 {summary['times']}회씩 추가 생산을 진행했습니다.",
-        ]
-        if reward.get("created_user"):
-            lines.append("시크리타이 게임 기록이 없어 기본 계정을 함께 생성했습니다.")
-
-        color_total = sum(summary["color"].get(name, 0) for name in COLOR_NAMES)
-        shape_total = sum(summary["shape"].get(name, 0) for name in SHAPE_NAMES)
-        lines.append(f"획득: 색깔 Secret {color_total}개 / 모양 Secret {shape_total}개")
-        for factory in summary["factories"]:
-            lines.append(
-                f"- {factory['slot'] + 1}번 공장: 색 {factory['color']}개 / 모양 {factory['shape']}개"
-            )
-        return "\n".join(lines)
+    def _format_kyohoon_reward(self, reward: dict) -> str:
+        """커밋된 인크리멘탈 교훈 보상을 DM과 스레드용으로 렌더링합니다."""
+        before = format_amount(LayeredDecimal.from_json(reward["before_essence"]))
+        after = format_amount(LayeredDecimal.from_json(reward["after_essence"]))
+        gained = format_amount(LayeredDecimal.from_json(reward["reward_amount"]))
+        return (
+            "교훈이 게시되어 이야기의 정수 보상을 받았습니다.\n"
+            f"정수: {before} → {after} (획득 {gained})\n"
+            "기존 정수가 0이면 첫 보상으로 1을 받고, 그 외에는 정수가 두 배가 됩니다."
+        )
 
 
 async def setup(bot):

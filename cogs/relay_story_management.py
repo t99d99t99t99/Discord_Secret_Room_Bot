@@ -2,7 +2,9 @@ import os
 import discord
 from discord.ext import commands
 import yaml
-from .secretae_db import grant_story_essence
+from .secretae_incremental.constants import SECRETS, SYMBOLS
+from .secretae_incremental.db import grant_relay_secret_reward
+from .secretae_incremental.numbers import LayeredDecimal, format_amount
 
 class RelayStoryManagement(commands.Cog):
     def __init__(self, bot):
@@ -47,12 +49,13 @@ class RelayStoryManagement(commands.Cog):
             )
             return
 
-        reward = await grant_story_essence(self.bot.db, message.author.id, message.id)
+        reward = await grant_relay_secret_reward(self.bot.db, message.author.id, message.id)
         if reward.get("awarded"):
-            lines = ["이야기잇기에 참여하여 **이야기의 정수** 1개를 얻었습니다."]
-            if reward.get("created_user"):
-                lines.append("시크리타이 게임 기록이 없어 기본 계정을 함께 생성했습니다.")
-            lines.append(f"현재 보유한 이야기의 정수: {reward['story_essence_count']}개")
+            lines = ["이야기잇기에 참여하여 모든 비밀이 **1.05배**가 되었습니다."]
+            for key in SECRETS:
+                before = format_amount(LayeredDecimal.from_json(reward["before"][key]))
+                after = format_amount(LayeredDecimal.from_json(reward["after"][key]))
+                lines.append(f"{SYMBOLS[key]} {before} → {after}")
             try:
                 await message.author.send("\n".join(lines))
             except discord.Forbidden:

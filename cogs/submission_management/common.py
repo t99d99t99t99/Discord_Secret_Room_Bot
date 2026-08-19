@@ -104,7 +104,7 @@ async def send_log_thread_message(bot, content: str):
 
 
 class SubmissionManagementCog(commands.Cog):
-    """Shared state and configuration helpers for submission cogs."""
+    """신청 관리 코그의 공통 상태 및 설정 도우미입니다."""
 
     def __init__(self, bot):
         self.bot = bot
