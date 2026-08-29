@@ -454,7 +454,7 @@ async def grant_kyohoon_reward(
 async def grant_tomak_reward(
     pool, discord_id, source_thread_id, message_id, posted_thread_id
 ):
-    """게시된 토막상식에 대해 모든 비밀을 한 번 5% 증가시킵니다."""
+    """게시된 토막상식에 대해 모든 비밀을 한 번 100% 증가시킵니다."""
     async with pool.acquire() as conn:
         async with conn.transaction():
             inserted = await conn.fetchval(
@@ -474,11 +474,11 @@ async def grant_tomak_reward(
             state = await _state(conn, discord_id)
             before = dict(state["secrets"])
             after = {
-                key: (value * N.of("1.05")).floor() for key, value in before.items()
+                key: (value * N.of("2")).floor() for key, value in before.items()
             }
             increases = {key: after[key] - before[key] for key in SECRETS}
             details = {
-                "multiplier": "1.05",
+                "multiplier": "2",
                 "before": _encode(before),
                 "after": _encode(after),
                 "increases": _encode(increases),

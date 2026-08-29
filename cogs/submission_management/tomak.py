@@ -699,7 +699,7 @@ class TomakManagement(SubmissionManagementCog):
         """커밋된 비밀별 토막상식 보상을 DM과 스레드용으로 렌더링합니다."""
         before = reward["before"]
         after = reward["after"]
-        lines = ["토막상식이 게시되어 모든 비밀이 1.05배가 되었습니다."]
+        lines = ["토막상식이 게시되어 모든 비밀이 2배가 되었습니다."]
         for key in SECRETS:
             old = format_amount(LayeredDecimal.from_json(before[key]))
             new = format_amount(LayeredDecimal.from_json(after[key]))
