@@ -302,7 +302,9 @@ class TomakManagement(SubmissionManagementCog):
                     f"[토막상식 보상 DM 실패] 신청 메시지 `{submission_msg.id}`: {type(exc).__name__}: {exc}"
                 )
             try:
-                await publication_thread.send(reward_message)
+                await publication_thread.send(
+                    self._format_tomak_reward(reward, submission_msg.author.display_name)
+                )
             except discord.HTTPException as exc:
                 await self._send_log_thread_message(
                     f"[토막상식 보상 게시 알림 실패] 신청 메시지 `{submission_msg.id}`: {type(exc).__name__}: {exc}"
@@ -695,11 +697,12 @@ class TomakManagement(SubmissionManagementCog):
             thread_id, new_msg.id,
         )
 
-    def _format_tomak_reward(self, reward: dict) -> str:
-        """커밋된 비밀별 토막상식 보상을 DM과 스레드용으로 렌더링합니다."""
+    def _format_tomak_reward(self, reward: dict, recipient_name: str | None = None) -> str:
+        """커밋된 비밀별 토막상식 보상을 DM 또는 공개 스레드용으로 렌더링합니다."""
         before = reward["before"]
         after = reward["after"]
-        lines = ["토막상식이 게시되어 모든 비밀이 2배가 되었습니다."]
+        recipient = f"{recipient_name} 님이 이 토막상식을 게시하여 " if recipient_name else ""
+        lines = [f"{recipient}모든 비밀이 2배가 되었습니다."]
         for key in SECRETS:
             old = format_amount(LayeredDecimal.from_json(before[key]))
             new = format_amount(LayeredDecimal.from_json(after[key]))

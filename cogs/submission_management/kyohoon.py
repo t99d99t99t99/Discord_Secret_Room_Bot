@@ -250,7 +250,9 @@ class KyohoonManagement(SubmissionManagementCog):
                     f"[교훈 보상 DM 실패] 신청 메시지 `{submission_msg.id}`: {type(exc).__name__}: {exc}"
                 )
             try:
-                await publication_thread.send(reward_message)
+                await publication_thread.send(
+                    self._format_kyohoon_reward(reward, submission_msg.author.display_name)
+                )
             except discord.HTTPException as exc:
                 await self._send_log_thread_message(
                     f"[교훈 보상 게시 알림 실패] 신청 메시지 `{submission_msg.id}`: {type(exc).__name__}: {exc}"
@@ -619,13 +621,14 @@ class KyohoonManagement(SubmissionManagementCog):
             thread_id, new_msg.id
         )
 
-    def _format_kyohoon_reward(self, reward: dict) -> str:
-        """커밋된 인크리멘탈 교훈 보상을 DM과 스레드용으로 렌더링합니다."""
+    def _format_kyohoon_reward(self, reward: dict, recipient_name: str | None = None) -> str:
+        """커밋된 인크리멘탈 교훈 보상을 DM 또는 공개 스레드용으로 렌더링합니다."""
         before = format_amount(LayeredDecimal.from_json(reward["before_essence"]))
         after = format_amount(LayeredDecimal.from_json(reward["after_essence"]))
         gained = format_amount(LayeredDecimal.from_json(reward["reward_amount"]))
+        recipient = f"{recipient_name} 님이 이 교훈을 게시하여 " if recipient_name else ""
         return (
-            "교훈이 게시되어 이야기의 정수 보상을 받았습니다.\n"
+            f"{recipient}이야기의 정수 보상을 받았습니다.\n"
             f"정수: {before} → {after} (획득 {gained})\n"
             "기존 정수가 0이면 첫 보상으로 1을 받고, 그 외에는 정수가 두 배가 됩니다."
         )
