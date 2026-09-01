@@ -414,14 +414,17 @@ class ConcentrationView(discord.ui.View):
     async def confirm(self, interaction, button):
         """사용자 확인 후 농축을 다시 계산하고 커밋합니다."""
         try:
-            gain, before, after = await concentrate(self.cog.bot.db, interaction.user.id)
+            await interaction.response.defer()
+            await concentrate(self.cog.bot.db, interaction.user.id)
             self.stop()
-            await interaction.response.send_message(
-                _concentration_text(before, gain, after, "농축을 완료했습니다!"),
-                ephemeral=False,
+            await interaction.followup.send(
+                f"{interaction.user.display_name} 님이 모든 비밀 파편, 비밀, 비밀 유기체를 희생하여 농축을 완료했습니다!"
             )
         except ValueError as error:
-            await interaction.response.send_message(str(error), ephemeral=True)
+            if interaction.response.is_done():
+                await interaction.followup.send(str(error), ephemeral=True)
+            else:
+                await interaction.response.send_message(str(error), ephemeral=True)
 
     @discord.ui.button(label="취소", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction, button):
