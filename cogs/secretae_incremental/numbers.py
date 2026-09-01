@@ -361,6 +361,14 @@ def maximum(a, b):
     return max(a, b)
 
 
+def _format_layer_magnitude(magnitude: Decimal) -> str:
+    """계층 접미사 앞에 표시할 크기를 읽기 쉽게 형식화합니다."""
+    if magnitude < Decimal(10000):
+        displayed = magnitude.quantize(Decimal(".01"), rounding=ROUND_DOWN)
+        return f"{displayed:f}".rstrip("0").rstrip(".")
+    return format_amount(LayeredDecimal.of(magnitude))
+
+
 def format_amount(value: LayeredDecimal) -> str:
     """수량을 절삭한 일반 표기 또는 중첩 과학 표기법으로 형식화합니다."""
     value = coerce(value)
@@ -383,6 +391,6 @@ def format_amount(value: LayeredDecimal) -> str:
         exponent_floor = exponent.to_integral_value(rounding=ROUND_FLOOR)
         mantissa = TEN ** (exponent - exponent_floor)
         displayed_exponent = format_amount(LayeredDecimal.of(exponent))
-        return f"{mantissa.quantize(Decimal('.01'), rounding=ROUND_DOWN):f}e{displayed_exponent}"
+        return f"{mantissa.quantize(Decimal('1'), rounding=ROUND_DOWN):f}e{displayed_exponent}"
 
-    return f"1e1e{format_amount(LayeredDecimal.of(value.mag))}"
+    return f"1e{_format_layer_magnitude(value.mag)}e^{value.layer}"

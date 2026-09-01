@@ -57,6 +57,14 @@ class LayeredDecimalTests(unittest.TestCase):
         self.assertEqual(format_amount(N.of("9999.9")), "9999")
         self.assertEqual(format_amount(N.of("38600000")), "3.86e7")
         self.assertTrue(format_amount(N.of("1e15")).endswith("e15"))
+        self.assertEqual(
+            format_amount(N.from_json({"sign": 1, "layer": "1", "mag": "204000.94"})),
+            "8e2.04e5",
+        )
+        self.assertEqual(
+            format_amount(N.from_json({"sign": 1, "layer": "7", "mag": "6.19"})),
+            "1e6.19e^7",
+        )
 
     def test_unbounded_layer_never_uses_integer_parsing(self):
         layer = "9" * 80
