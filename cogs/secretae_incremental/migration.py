@@ -203,3 +203,55 @@ async def run_pending_migrations(pool):
                     "verified_total_essence": total.to_json(),
                 },
             )
+
+
+async def import_legacy_game_to_guild(pool, guild_id: int):
+    """Copy global legacy Incremental state into one guild exactly once.
+
+    JSON payloads are copied without decoding or numeric conversion, preserving
+    layered-decimal precision for the existing server.
+    """
+    key = f"{GUILD_SCOPE_MIGRATION_KEY}:{guild_id}"
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("SELECT pg_advisory_xact_lock($1)", 739182642)
+            if await conn.fetchval("SELECT 1 FROM game_migration_evidence WHERE migration_key=$1", key):
+                return False
+            checksum = await conn.fetchval("SELECT checksum FROM si_migration_snapshots WHERE migration_key=$1", MIGRATION_KEY)
+            source_counts = {
+                "players": await conn.fetchval("SELECT COUNT(*) FROM si_players"),
+                "secrets": await conn.fetchval("SELECT COUNT(*) FROM si_secrets"),
+                "organics": await conn.fetchval("SELECT COUNT(*) FROM si_organics"),
+                "alerts": await conn.fetchval("SELECT COUNT(*) FROM si_alert_settings"),
+                "relay_rewards": await conn.fetchval("SELECT COUNT(*) FROM si_relay_rewards"),
+            }
+            players = await conn.execute(
+                """INSERT INTO guild_game_players(guild_id,discord_id,shards,essence,last_produced_game_date,last_concentrated_week_start,last_game_command_game_date,created_at,updated_at)
+                   SELECT $1,discord_id,shards,essence,last_produced_game_date,last_concentrated_week_start,last_game_command_game_date,created_at,updated_at FROM si_players
+                   ON CONFLICT(guild_id,discord_id) DO NOTHING""", guild_id)
+            await conn.execute("INSERT INTO guild_game_secrets(guild_id,discord_id,amounts) SELECT $1,discord_id,amounts FROM si_secrets ON CONFLICT(guild_id,discord_id) DO NOTHING", guild_id)
+            await conn.execute("INSERT INTO guild_game_organics(guild_id,discord_id,amounts) SELECT $1,discord_id,amounts FROM si_organics ON CONFLICT(guild_id,discord_id) DO NOTHING", guild_id)
+            await conn.execute("INSERT INTO guild_game_world_state(guild_id,total_essence,highest_essence) SELECT $1,total_essence,highest_essence FROM si_world_state WHERE singleton=TRUE ON CONFLICT(guild_id) DO NOTHING", guild_id)
+            await conn.execute("INSERT INTO guild_game_alert_settings(guild_id,discord_id,alert_type,alert_hour,updated_at) SELECT $1,discord_id,alert_type,alert_hour,updated_at FROM si_alert_settings ON CONFLICT(guild_id,discord_id) DO NOTHING", guild_id)
+            await conn.execute("INSERT INTO guild_game_relay_rewards(guild_id,message_id,discord_id,details,awarded_at) SELECT $1,message_id,discord_id,details,awarded_at FROM si_relay_rewards ON CONFLICT(guild_id,message_id) DO NOTHING", guild_id)
+            await conn.execute("INSERT INTO guild_game_relay_turn_state(guild_id,last_rewarded_discord_id,updated_at) SELECT $1,last_rewarded_discord_id,updated_at FROM si_relay_turn_state WHERE singleton=TRUE ON CONFLICT(guild_id) DO NOTHING", guild_id)
+            scoped_counts = {
+                "players": await conn.fetchval("SELECT COUNT(*) FROM guild_game_players WHERE guild_id=$1", guild_id),
+                "secrets": await conn.fetchval("SELECT COUNT(*) FROM guild_game_secrets WHERE guild_id=$1", guild_id),
+                "organics": await conn.fetchval("SELECT COUNT(*) FROM guild_game_organics WHERE guild_id=$1", guild_id),
+                "alerts": await conn.fetchval("SELECT COUNT(*) FROM guild_game_alert_settings WHERE guild_id=$1", guild_id),
+                "relay_rewards": await conn.fetchval("SELECT COUNT(*) FROM guild_game_relay_rewards WHERE guild_id=$1", guild_id),
+            }
+            source_world = await conn.fetchrow("SELECT total_essence,highest_essence FROM si_world_state WHERE singleton=TRUE")
+            scoped_world = await conn.fetchrow("SELECT total_essence,highest_essence FROM guild_game_world_state WHERE guild_id=$1", guild_id)
+            await conn.execute(
+                "INSERT INTO game_migration_evidence(migration_key,guild_id,source_checksum,report) VALUES($1,$2,$3,$4)",
+                key, guild_id, checksum,
+                {
+                    "source": "si_*", "insert_result": players,
+                    "source_counts": source_counts, "scoped_counts": scoped_counts,
+                    "counts_match": source_counts == scoped_counts,
+                    "world_match": bool(source_world and scoped_world and source_world["total_essence"] == scoped_world["total_essence"] and source_world["highest_essence"] == scoped_world["highest_essence"]),
+                },
+            )
+            return True

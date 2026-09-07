@@ -22,6 +22,13 @@ from .common import (
     toggle_schedule_update,
 )
 
+
+def _legacy_guild_id() -> int:
+    value = os.getenv("SECRET_ROOM_SERVER_ID")
+    if value is None or not value.isdecimal():
+        raise RuntimeError("SECRET_ROOM_SERVER_ID must identify the legacy guild")
+    return int(value)
+
 def _week_of_month(date: datetime.date) -> int:
     count = 0
     d = date.replace(day=1)
@@ -81,7 +88,7 @@ class KyohoonManagement(SubmissionManagementCog):
         await self._execute_kyohoon_update("자동", None)
 
     async def _retry_pending_rewards(self, trigger: str):
-        summary = await retry_pending_submission_rewards(self.bot.db, "kyohoon")
+        summary = await retry_pending_submission_rewards(self.bot.db, _legacy_guild_id(), "kyohoon")
         if summary["awarded"] or summary["already_awarded"] or summary["failed"]:
             await self._send_log_thread_message(
                 "[교훈 보상 재시도]\n"
@@ -234,6 +241,7 @@ class KyohoonManagement(SubmissionManagementCog):
 
         reward = await grant_kyohoon_reward(
             self.bot.db,
+            latest_sub_thread.guild.id,
             submission_msg.author.id,
             latest_sub_thread.id,
             submission_msg.id,
@@ -323,7 +331,7 @@ class KyohoonManagement(SubmissionManagementCog):
             return True
 
         if command == "!force_reward":
-            summary = await retry_pending_submission_rewards(self.bot.db)
+            summary = await retry_pending_submission_rewards(self.bot.db, _legacy_guild_id())
             failed = "\n".join(
                 f"- {kind} `{message_id}`: {reason}"
                 for kind, message_id, reason in summary["failed"]
@@ -442,9 +450,6 @@ class KyohoonManagement(SubmissionManagementCog):
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
-            return
-
-        if await self._handle_force_operation(message):
             return
 
         submission_ch = self._get_configured_channel("KYOHOON_SUBMISSION_ID")

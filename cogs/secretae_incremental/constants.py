@@ -61,5 +61,8 @@ KOREAN_NAMES = MappingProxyType(
 )
 INITIAL_SECRETS = 100
 INITIAL_ORGANICS = 1
+# Applies to every Incremental guild, including the migrated Secret Room guild.
+# Keep it centralised so the runtime and deterministic simulator cannot drift.
+PRODUCTION_DIVISOR = 77
 
 SHARD_SYMBOL = "✨"  # 빛나는 파편

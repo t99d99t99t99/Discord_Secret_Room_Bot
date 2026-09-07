@@ -5,7 +5,6 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 import os
 import discord
-import yaml
 from discord import app_commands
 from discord.ext import commands, tasks
 from .constants import *
@@ -19,33 +18,37 @@ from .db import (
     max_synthesize,
     produce,
     quote_synthesis,
+    prune_expired_reward_snapshots,
     due_alert_players,
     record_game_command,
     save_alert_setting,
     synthesize,
 )
 from .numbers import LayeredDecimal as N, format_amount
+from .migration import import_legacy_game_to_guild
+from ..game_config import game_enabled, reward_policy_label
+from ..localization import interaction_locale, text
 
 
-def _status_view(state):
+def _status_view(state, locale="ko"):
     """구역 사이에 Discord 구분선을 둔 현황 Components v2 레이아웃입니다."""
     sections = [
         "\n".join(
             (
-                f"**비밀 파편**: {format_amount(state['shards'])}",
-                f"**이야기의 정수**: {format_amount(state['essence'])}",
+                text("game.status.shards", locale, amount=format_amount(state["shards"])),
+                text("game.status.essence", locale, amount=format_amount(state["essence"])),
             )
         ),
-        "**비밀 유기체**\n"
+        text("game.status.organics", locale) + "\n"
         + " · ".join(
             f"{ORGANIC_SYMBOLS[k]} {format_amount(state['organics'][k])}"
             for k in COLORS
         ),
-        "**색 비밀**\n"
+        text("game.status.colour_secrets", locale) + "\n"
         + " · ".join(
             f"{SYMBOLS[k]} {format_amount(state['secrets'][k])}" for k in COLORS
         ),
-        "**형태 비밀**\n"
+        text("game.status.shape_secrets", locale) + "\n"
         + " · ".join(
             f"{SYMBOLS[k]} {format_amount(state['secrets'][k])}" for k in SHAPES
         ),
@@ -58,7 +61,7 @@ def _status_view(state):
     return view
 
 
-def _amount_table(rows, change_label):
+def _amount_table(rows, change_label, locale="ko"):
     """결과·기존·변화량 열을 이모지와 숫자 폭에 맞춰 정렬합니다."""
     formatted_rows = [
         (symbol, *(format_amount(value) for value in values))
@@ -71,8 +74,8 @@ def _amount_table(rows, change_label):
     )
     symbol_width = max(len(symbol) for symbol, *_ in formatted_rows)
     header = (
-        f"{' ' * (symbol_width + 1)}{'결과'.rjust(width)} "
-        f"← {'기존'.rjust(width)} + {change_label.rjust(width)}"
+        f"{' ' * (symbol_width + 1)}{text('game.table.result', locale).rjust(width)} "
+        f"← {text('game.table.before', locale).rjust(width)} + {change_label.rjust(width)}"
     )
     table = "\n".join(
         f"{symbol.ljust(symbol_width)} {result.rjust(width)} ← {before.rjust(width)} + {gain.rjust(width)}"
@@ -81,7 +84,7 @@ def _amount_table(rows, change_label):
     return f"{header}\n{table}"
 
 
-def _production_text(state, production):
+def _production_text(state, production, locale="ko"):
     """생산 전후 및 획득량을 숫자 열이 맞춰진 결과표로 렌더링합니다."""
     rows = [(SHARD_SYMBOL, state["shards"], *production["shards"])]
     rows.extend(
@@ -94,21 +97,21 @@ def _production_text(state, production):
     )
     return "\n".join(
         (
-            "**파편 및 유기체 생산을 완료했습니다!**",
-            f"```\n{_amount_table(rows, '생산')}\n```",
+            text("game.production.complete", locale),
+            f"```\n{_amount_table(rows, text('game.production.change', locale), locale)}\n```",
         )
     )
 
 
-def _concentration_text(before, gain, after, title):
+def _concentration_text(before, gain, after, title, locale="ko"):
     """농축 전후의 이야기 정수를 간결한 변화 행으로 렌더링합니다."""
     values = [format_amount(value) for value in (after, before, gain)]
     width = max(len(value) for value in values)
     return "\n".join(
         (
-            f"**{title}**",
+            text("game.concentration.title", locale, title=title),
             "```",
-            f"이야기의 정수 {values[0].rjust(width)} ← {values[1].rjust(width)} + {values[2].rjust(width)}",
+            text("game.concentration.line", locale, after=values[0].rjust(width), before=values[1].rjust(width), gain=values[2].rjust(width)),
             "```",
         )
     )
@@ -125,7 +128,7 @@ def _key(value):
     )
 
 
-def _price_text(state):
+def _price_text(state, locale="ko"):
     """개인용 합성 및 농축 견적 전체를 렌더링합니다."""
     gap = state["highest"] - state["essence"]
     discount = (
@@ -140,24 +143,23 @@ def _price_text(state):
     heart_multiplier = N.of(1) + (state["secrets"][HEART] / N.of(100)).ceil()
     base_gain = gain / heart_multiplier if gain.sign else N.of(0)
     lines = [
-        "**현재 합성 가격**",
-        f"비밀 파편: {format_amount(state['shards'])}",
-        f"정수 따라잡기 할인: {discount * 100:.0f}% / □ 비용 배율: {square_multiplier.mag:.3f}",
-        "\n**다음 비밀 1개 합성 비용**",
+        text("game.price.title", locale),
+        text("game.price.shards", locale, amount=format_amount(state["shards"])),
+        text("game.price.discount", locale, discount=f"{discount * 100:.0f}", multiplier=f"{square_multiplier.mag:.3f}"),
+        "\n" + text("game.price.next", locale),
     ]
     for key in SECRETS:
         cost = quote_synthesis(state, key, N.of(1))
-        mark = "구매 가능" if state["shards"].is_affordable(cost) else "파편 부족"
+        mark = text("game.price.available" if state["shards"].is_affordable(cost) else "game.price.unavailable", locale)
         lines.append(
-            f"{SYMBOLS[key]} 보유 {format_amount(state['secrets'][key])}개 / "
-            f"비용: {format_amount(cost)} 비밀 파편 ({mark})"
+            text("game.price.secret", locale, symbol=SYMBOLS[key], owned=format_amount(state["secrets"][key]), cost=format_amount(cost), availability=mark)
         )
     lines.extend(
         [
-            "\n**농축 예상**",
-            f"기본 정수: {format_amount(base_gain)} / ♡ 배율: {format_amount(heart_multiplier)}",
-            f"획득 정수: {format_amount(gain)} / 현재 정수: {format_amount(state['essence'])} → {format_amount(state['essence'] + gain)}",
-            "농축을 실행하면 비밀 파편, 모든 유기체, 모든 비밀이 초기값으로 초기화됩니다.",
+            "\n" + text("game.price.concentration", locale),
+            text("game.price.essence", locale, base=format_amount(base_gain), multiplier=format_amount(heart_multiplier)),
+            text("game.price.gain", locale, gain=format_amount(gain), current=format_amount(state["essence"]), after=format_amount(state["essence"] + gain)),
+            text("game.price.reset", locale),
         ]
     )
     return "\n".join(lines)
@@ -181,19 +183,20 @@ def _migration_report_text(report):
     return "\n".join(lines)
 
 
+def _game_help_text(template, game_name):
+    """Render the guild-configured brand without mutating shared help text."""
+    return template.format(game_name=game_name or "Essence Foundry")
+
+
 class SecretaeIncremental(commands.Cog):
     """시크리타이 인크리멘탈 Discord 명령 그룹입니다."""
 
-    game = app_commands.Group(name="게임", description="시크리타이 인크리멘탈")
+    game = app_commands.Group(name="게임", description="이 서버의 증분 게임")
 
     def __init__(self, bot):
         """도메인 계층에서 사용하는 봇 참조를 보관합니다."""
         self.bot = bot
         self._commands_synced = False
-        with open("assets/message.yaml", encoding="utf-8") as message_file:
-            self._help_message = yaml.safe_load(message_file)["help"][
-                "secretae_incremental"
-            ]
         self.send_game_alerts.start()
 
     def cog_unload(self):
@@ -206,14 +209,26 @@ class SecretaeIncremental(commands.Cog):
         if self._commands_synced:
             return
 
-        guild = discord.Object(id=int(os.environ["SECRET_ROOM_SERVER_ID"]))
-        self.bot.tree.copy_global_to(guild=guild)
-        await self.bot.tree.sync(guild=guild)
+        # Preserve the existing server's game as enabled under its configured
+        # legacy name; every other guild starts disabled.
+        legacy_guild = os.getenv("SECRET_ROOM_SERVER_ID")
+        if legacy_guild and legacy_guild.isdecimal():
+            await self.bot.db.execute(
+                "INSERT INTO guild_settings(guild_id,game_enabled,game_name) VALUES($1,TRUE,'Secretae Incremental') "
+                "ON CONFLICT(guild_id) DO UPDATE SET game_enabled=TRUE,game_name='Secretae Incremental',updated_at=NOW()",
+                int(legacy_guild),
+            )
+            await import_legacy_game_to_guild(self.bot.db, int(legacy_guild))
         self._commands_synced = True
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """모든 /게임 호출을 일일 게임 활동으로 처리합니다."""
-        await record_game_command(self.bot.db, interaction.user.id)
+        if interaction.guild is None or not await game_enabled(self.bot.db, interaction.guild.id):
+            await interaction.response.send_message(
+                text("game.disabled", await interaction_locale(interaction)), ephemeral=True
+            )
+            return False
+        await record_game_command(self.bot.db, interaction.guild.id, interaction.user.id)
         return True
 
     @tasks.loop(
@@ -221,34 +236,30 @@ class SecretaeIncremental(commands.Cog):
     )
     async def send_game_alerts(self):
         """활동이 없을 때만 선택한 KST 시각에 플레이어에게 DM을 보냅니다."""
+        await prune_expired_reward_snapshots(self.bot.db)
         now = datetime.now(timezone.utc)
         kst_now = now.astimezone(timezone(timedelta(hours=9)))
         is_concentration_deadline = (kst_now.weekday() == 6 and kst_now.hour >= 5) or (
             kst_now.weekday() == 0 and kst_now.hour < 5
         )
-        for row in await due_alert_players(
-            self.bot.db,
-            kst_now.hour,
-            is_concentration_deadline,
-            now,
-        ):
-            try:
-                user = self.bot.get_user(
-                    row["discord_id"]
-                ) or await self.bot.fetch_user(row["discord_id"])
-                messages = []
-                if row["needs_game"]:
-                    messages.append(
-                        "오늘 아직 시크리타이 인크리멘탈 게임을 플레이하지 않았어요."
-                    )
-                if row["needs_concentration"]:
-                    messages.append(
-                        "농축 가능 횟수가 월요일 오전 5시(KST)에 초기화됩니다. 아직 유효한 `/게임 농축`을 완료하지 않았어요."
-                    )
-                await user.send("게임 알림: " + "\n".join(messages))
-            except discord.HTTPException:
-                # 사용자가 DM을 차단할 수 있으므로 나중에 허용할 수 있게 설정은 보존합니다.
-                pass
+        guild_ids = await self.bot.db.fetch("SELECT guild_id,game_name,locale FROM guild_settings WHERE game_enabled=TRUE")
+        for guild in guild_ids:
+            for row in await due_alert_players(
+                self.bot.db, guild["guild_id"], kst_now.hour, is_concentration_deadline, now
+            ):
+                try:
+                    user = self.bot.get_user(
+                        row["discord_id"]
+                    ) or await self.bot.fetch_user(row["discord_id"])
+                    messages = []
+                    if row["needs_game"]:
+                        messages.append(text("game.alert.daily", guild["locale"], game_name=guild["game_name"]))
+                    if row["needs_concentration"]:
+                        messages.append(text("game.alert.concentration", guild["locale"]))
+                    await user.send(text("game.alert.prefix", guild["locale"], messages="\n".join(messages)))
+                except discord.HTTPException:
+                    # 사용자가 DM을 차단할 수 있으므로 나중에 허용할 수 있게 설정은 보존합니다.
+                    pass
 
     @send_game_alerts.before_loop
     async def before_send_game_alerts(self):
@@ -261,27 +272,60 @@ class SecretaeIncremental(commands.Cog):
         else:
             await interaction.response.send_message(str(error), ephemeral=True)
 
-    @game.command(name="도움말", description="시크리타이 인크리멘탈 안내를 봅니다.")
+    @game.command(name="도움말", description="이 서버의 게임 안내를 봅니다.")
     async def help(self, interaction: discord.Interaction):
         """저장된 게임 안내를 호출자에게만 보여 줍니다."""
-        await interaction.response.send_message(self._help_message, ephemeral=True)
+        settings = await self.bot.db.fetchrow(
+            "SELECT game_name,locale FROM guild_settings WHERE guild_id=$1", interaction.guild.id
+        )
+        locale = await interaction_locale(interaction)
+        await interaction.response.send_message(
+            text("game.help", locale, game_name=settings["game_name"] if settings else "Essence Foundry"),
+            ephemeral=True,
+        )
+
+    @game.command(name="보상", description="이 서버의 공지·릴레이 게임 보상을 확인합니다.")
+    async def rewards(self, interaction: discord.Interaction):
+        """Show configured community rewards only when a member explicitly asks."""
+        assert interaction.guild is not None
+        rows = await self.bot.db.fetch(
+            "SELECT 'notice_queue' AS feature,display_name,reward_policy FROM notice_queues "
+            "WHERE guild_id=$1 AND state='active' AND reward_policy->>'type' <> 'none' "
+            "UNION ALL SELECT 'relay_story',display_name,reward_policy FROM relay_stories "
+            "WHERE guild_id=$1 AND state='active' AND reward_policy->>'type' <> 'none' "
+            "ORDER BY feature,display_name",
+            interaction.guild.id,
+        )
+        if not rows:
+            await interaction.response.send_message(text("game.rewards.none", await interaction_locale(interaction)), ephemeral=True)
+            return
+        locale = await interaction_locale(interaction)
+        lines = [text("game.rewards.title", locale)]
+        lines.extend(
+            text("game.rewards.line", locale, feature=text(f"game.feature.{'queue' if row['feature'] == 'notice_queue' else 'relay'}", locale), name=row['display_name'], policy=reward_policy_label(row['reward_policy'], locale))
+            for row in rows
+        )
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @game.command(name="알림", description="게임 알림을 설정합니다.")
     async def alert(self, interaction: discord.Interaction):
         """호출자 전용 알림 유형 및 KST 시각 선택 절차를 엽니다."""
         await interaction.response.send_message(
-            "게임 알림을 선택하세요. 알림은 기본적으로 꺼져 있으며, 선택한 설정은 본인에게만 적용됩니다.",
+            text("game.alert.prompt", await interaction_locale(interaction)),
             ephemeral=True,
-            view=AlertTypeView(self, interaction.user.id),
+            view=AlertTypeView(self, interaction.guild.id, interaction.user.id, await interaction_locale(interaction)),
         )
 
     @game.command(name="현황", description="현재 게임 현황을 봅니다.")
     async def status(self, interaction: discord.Interaction):
         """호출자의 현재 게임 자원을 보여 줍니다."""
-        state = await get_status(self.bot.db, interaction.user.id)
-        await interaction.response.send_message(view=_status_view(state))
-        report = await get_unacknowledged_migration_report(
-            self.bot.db, interaction.user.id
+        state = await get_status(self.bot.db, interaction.guild.id, interaction.user.id)
+        await interaction.response.send_message(view=_status_view(state, await interaction_locale(interaction)))
+        legacy_guild = os.getenv("SECRET_ROOM_SERVER_ID")
+        report = (
+            await get_unacknowledged_migration_report(self.bot.db, interaction.user.id)
+            if legacy_guild and legacy_guild.isdecimal() and interaction.guild.id == int(legacy_guild)
+            else None
         )
         if report:
             await interaction.followup.send(
@@ -293,8 +337,8 @@ class SecretaeIncremental(commands.Cog):
     async def production(self, interaction: discord.Interaction):
         """하루 생산을 한 번 실행합니다."""
         try:
-            state, summary = await produce(self.bot.db, interaction.user.id)
-            await interaction.response.send_message(_production_text(state, summary))
+            state, summary = await produce(self.bot.db, interaction.guild.id, interaction.user.id)
+            await interaction.response.send_message(_production_text(state, summary, await interaction_locale(interaction)))
         except ValueError as error:
             await self._error(interaction, error)
 
@@ -307,10 +351,10 @@ class SecretaeIncremental(commands.Cog):
         try:
             key = _key(secret)
             cost, state = await synthesize(
-                self.bot.db, interaction.user.id, key, amount
+                self.bot.db, interaction.guild.id, interaction.user.id, key, amount
             )
             await interaction.response.send_message(
-                f"{SYMBOLS[key]} 비밀 {format_amount(N.of(amount))}개를 합성했습니다. (비용 {format_amount(cost)})"
+                text("game.synthesis.complete", await interaction_locale(interaction), symbol=SYMBOLS[key], amount=format_amount(N.of(amount)), cost=format_amount(cost))
             )
         except ValueError as error:
             await self._error(interaction, error)
@@ -318,13 +362,14 @@ class SecretaeIncremental(commands.Cog):
     @game.command(name="가격", description="현재 비밀 합성 가격을 확인합니다.")
     async def price(self, interaction: discord.Interaction):
         """게임 상태를 바꾸지 않고 모든 비밀의 한 개당 합성 가격을 보여 줍니다."""
-        state = await get_status(self.bot.db, interaction.user.id)
-        text = _price_text(state)
-        if len(text) <= 2_000:
-            await interaction.response.send_message(text, ephemeral=True)
+        state = await get_status(self.bot.db, interaction.guild.id, interaction.user.id)
+        locale = await interaction_locale(interaction)
+        rendered = _price_text(state, locale)
+        if len(rendered) <= 2_000:
+            await interaction.response.send_message(rendered, ephemeral=True)
         else:
             await interaction.response.send_message(
-                embed=discord.Embed(title="현재 합성 가격", description=text[:4_000]),
+                embed=discord.Embed(title=text("game.price.title", locale).strip("*"), description=rendered[:4_000]),
                 ephemeral=True,
             )
 
@@ -334,19 +379,19 @@ class SecretaeIncremental(commands.Cog):
     async def maximum_synthesis(self, interaction: discord.Interaction):
         """비밀 우선순위에 따라 파편을 가능한 만큼 사용합니다."""
         try:
-            state, summary = await max_synthesize(self.bot.db, interaction.user.id)
+            state, summary = await max_synthesize(self.bot.db, interaction.guild.id, interaction.user.id)
             rows = [
                 (SYMBOLS[key], state["secrets"][key], *summary["secrets"][key])
                 for key in SECRETS
                 if summary["secrets"][key][1].sign
             ]
+            locale = await interaction_locale(interaction)
             await interaction.response.send_message(
                 "\n".join(
                     (
-                        "**최대 합성을 완료했습니다!**",
-                        f"```\n{_amount_table(rows, '합성')}\n```",
-                        f"{SHARD_SYMBOL} 사용: {format_amount(summary['shards'][1])} / "
-                        f"남음: {format_amount(state['shards'])}",
+                        text("game.max_synthesis.complete", locale),
+                        f"```\n{_amount_table(rows, text('game.max_synthesis.change', locale), locale)}\n```",
+                        text("game.max_synthesis.shards", locale, symbol=SHARD_SYMBOL, spent=format_amount(summary["shards"][1]), remaining=format_amount(state["shards"])),
                     )
                 )
             )
@@ -356,22 +401,23 @@ class SecretaeIncremental(commands.Cog):
     @game.command(name="농축", description="초기화하고 이야기의 정수를 얻습니다.")
     async def concentration(self, interaction: discord.Interaction):
         """개인용 농축 확인창을 보여 줍니다."""
-        state = await get_status(self.bot.db, interaction.user.id)
+        state = await get_status(self.bot.db, interaction.guild.id, interaction.user.id)
         if not concentration_available(state):
             return await self._error(
                 interaction,
-                ValueError("농축은 매주 월요일 오전 5시(KST)에 초기화됩니다."),
+                ValueError(text("game.concentration.unavailable", await interaction_locale(interaction))),
             )
         gain = concentration_gain(state)
         if not gain.sign:
             return await self._error(
-                interaction, ValueError("농축으로 얻을 정수가 없습니다.")
+                interaction, ValueError(text("game.concentration.no_gain", await interaction_locale(interaction)))
             )
 
-        view = ConcentrationView(self, interaction.user.id)
+        locale = await interaction_locale(interaction)
+        view = ConcentrationView(self, interaction.guild.id, interaction.user.id, locale)
         await interaction.response.send_message(
-            f"{_concentration_text(state['essence'], gain, state['essence'] + gain, '농축 예정')}\n"
-            "비밀 파편, 유기체, 모든 비밀이 초기화됩니다.",
+            f"{_concentration_text(state['essence'], gain, state['essence'] + gain, text('game.concentration.scheduled', locale), locale)}\n"
+            + text("game.concentration.reset", locale),
             ephemeral=True,
             view=view,
         )
@@ -381,18 +427,22 @@ class SecretaeIncremental(commands.Cog):
 class ConcentrationView(discord.ui.View):
     """되돌릴 수 없는 농축을 위한 개인용 확인 컨트롤입니다."""
 
-    def __init__(self, cog, user_id):
+    def __init__(self, cog, guild_id, user_id, locale="ko"):
         """1분 후 만료되는 확인 뷰를 생성합니다."""
         super().__init__(timeout=60)
         self.cog = cog
+        self.guild_id = guild_id
         self.user_id = user_id
+        self.locale = locale
         self.message = None
+        self.confirm.label = text("game.concentration.confirm_button", locale)
+        self.cancel.label = text("game.concentration.cancel_button", locale)
 
     async def interaction_check(self, interaction):
         """이 확인창을 연 사용자만 버튼을 누를 수 있게 제한합니다."""
         if interaction.user.id != self.user_id:
             await interaction.response.send_message(
-                "명령을 실행한 사람만 확인할 수 있습니다.", ephemeral=True
+                text("game.concentration.private_only", self.locale), ephemeral=True
             )
             return False
 
@@ -405,7 +455,7 @@ class ConcentrationView(discord.ui.View):
         if self.message is not None:
             try:
                 await self.message.edit(
-                    content="농축 확인 시간이 만료되었습니다.", view=self
+                    content=text("game.concentration.expired", self.locale), view=self
                 )
             except discord.HTTPException:
                 pass
@@ -415,10 +465,10 @@ class ConcentrationView(discord.ui.View):
         """사용자 확인 후 농축을 다시 계산하고 커밋합니다."""
         try:
             await interaction.response.defer()
-            await concentrate(self.cog.bot.db, interaction.user.id)
+            await concentrate(self.cog.bot.db, self.guild_id, interaction.user.id)
             self.stop()
             await interaction.followup.send(
-                f"{interaction.user.display_name} 님이 모든 비밀 파편, 비밀, 비밀 유기체를 희생하여 농축을 완료했습니다!"
+                text("game.concentration.complete", self.locale, name=interaction.user.display_name)
             )
         except ValueError as error:
             if interaction.response.is_done():
@@ -431,22 +481,24 @@ class ConcentrationView(discord.ui.View):
         """상태를 바꾸지 않고 확인창을 닫습니다."""
         self.stop()
         await interaction.response.edit_message(
-            content="농축을 취소했습니다.", view=None
+            content=text("game.concentration.cancelled", self.locale), view=None
         )
 
 
 class _PrivateAlertView(discord.ui.View):
     """다른 구성원이 사용자의 알림을 바꾸지 못하도록 하는 기반 클래스입니다."""
 
-    def __init__(self, cog, user_id):
+    def __init__(self, cog, guild_id, user_id, locale="en"):
         super().__init__(timeout=120)
         self.cog = cog
+        self.guild_id = guild_id
         self.user_id = user_id
+        self.locale = locale
 
     async def interaction_check(self, interaction):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message(
-                "명령을 실행한 사람만 설정할 수 있습니다.", ephemeral=True
+                text("game.alert.private_only", self.locale), ephemeral=True
             )
             return False
         return True
@@ -458,22 +510,31 @@ class AlertTypeView(_PrivateAlertView):
     async def _choose(self, interaction, alert_type):
         self.stop()
         if alert_type == "disabled":
-            await save_alert_setting(self.cog.bot.db, self.user_id, "disabled")
+            await save_alert_setting(self.cog.bot.db, self.guild_id, self.user_id, "disabled")
             await interaction.response.edit_message(
-                content="게임 알림 설정이 완료되었습니다. 알림이 꺼져 있습니다.",
+                content=text("game.alert.disabled", self.locale),
                 view=None,
             )
             return
 
-        description = "농축 마감" if alert_type == "concentration" else "매일"
+        description = text(
+            "game.alert.concentration_chosen" if alert_type == "concentration" else "game.alert.daily_chosen",
+            self.locale,
+        )
         await interaction.response.edit_message(
-            content=f"{description} 알림을 선택했습니다.", view=None
+            content=description, view=None
         )
         await interaction.followup.send(
-            "알림을 받을 시각(KST)을 선택하세요.",
+            text("game.alert.choose_hour", self.locale),
             ephemeral=True,
-            view=AlertHourView(self.cog, self.user_id, alert_type),
+            view=AlertHourView(self.cog, self.guild_id, self.user_id, alert_type, self.locale),
         )
+
+    def __init__(self, cog, guild_id, user_id, locale="en"):
+        super().__init__(cog, guild_id, user_id, locale)
+        self.disable.label = text("game.alert.off_button", locale)
+        self.concentration.label = text("game.alert.concentration_button", locale)
+        self.game.label = text("game.alert.daily_button", locale)
 
     @discord.ui.button(label="알림 끄기", style=discord.ButtonStyle.secondary)
     async def disable(self, interaction, button):
@@ -491,11 +552,11 @@ class AlertTypeView(_PrivateAlertView):
 class AlertHourSelect(discord.ui.Select):
     """한 알림 유형에 사용할 간결한 24시간 KST 선택기입니다."""
 
-    def __init__(self, alert_type):
+    def __init__(self, alert_type, locale):
         super().__init__(
-            placeholder="시각 선택 (KST)",
+            placeholder=text("game.alert.hour_placeholder", locale),
             options=[
-                discord.SelectOption(label=f"{hour}시", value=str(hour))
+                discord.SelectOption(label=text("game.alert.hour_label", locale, hour=hour), value=str(hour))
                 for hour in range(24)
             ],
         )
@@ -504,22 +565,22 @@ class AlertHourSelect(discord.ui.Select):
     async def callback(self, interaction):
         view = self.view
         hour = int(self.values[0])
-        await save_alert_setting(view.cog.bot.db, view.user_id, self.alert_type, hour)
+        await save_alert_setting(view.cog.bot.db, view.guild_id, view.user_id, self.alert_type, hour)
         view.stop()
         await interaction.response.edit_message(
-            content=f"매일 {hour}시(KST)에 알림을 받도록 설정했습니다.", view=None
+            content=text("game.alert.hour_set", view.locale, hour=hour), view=None
         )
         await interaction.followup.send(
-            "게임 알림 설정이 완료되었습니다.", ephemeral=True
+            text("game.alert.complete", view.locale), ephemeral=True
         )
 
 
 class AlertHourView(_PrivateAlertView):
     """선택한 알림의 시각 선택기를 담은 개인용 두 번째 단계입니다."""
 
-    def __init__(self, cog, user_id, alert_type):
-        super().__init__(cog, user_id)
-        self.add_item(AlertHourSelect(alert_type))
+    def __init__(self, cog, guild_id, user_id, alert_type, locale="en"):
+        super().__init__(cog, guild_id, user_id, locale)
+        self.add_item(AlertHourSelect(alert_type, locale))
 
 
 async def setup(bot):

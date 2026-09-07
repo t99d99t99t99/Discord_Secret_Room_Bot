@@ -30,6 +30,13 @@ TOMAK_MAX_LENGTH = 300
 TOMAK_NEW_THREAD_THRESHOLD = 5
 
 
+def _legacy_guild_id() -> int:
+    value = os.getenv("SECRET_ROOM_SERVER_ID")
+    if value is None or not value.isdecimal():
+        raise RuntimeError("SECRET_ROOM_SERVER_ID must identify the legacy guild")
+    return int(value)
+
+
 def _tomak_thread_title(now_kst: datetime.datetime) -> str:
     return f"{now_kst:%Y년 %m월 %d일} 토막상식 신청"
 
@@ -110,7 +117,7 @@ class TomakManagement(SubmissionManagementCog):
         await self._execute_tomak_update("자동", None)
 
     async def _retry_pending_rewards(self, trigger: str):
-        summary = await retry_pending_submission_rewards(self.bot.db, "tomak")
+        summary = await retry_pending_submission_rewards(self.bot.db, _legacy_guild_id(), "tomak")
         if summary["awarded"] or summary["already_awarded"] or summary["failed"]:
             await self._send_log_thread_message(
                 "[토막상식 보상 재시도]\n"
@@ -286,6 +293,7 @@ class TomakManagement(SubmissionManagementCog):
             return False
         reward = await grant_tomak_reward(
             self.bot.db,
+            source_thread.guild.id,
             submission_msg.author.id,
             source_thread.id,
             submission_msg.id,
@@ -442,9 +450,6 @@ class TomakManagement(SubmissionManagementCog):
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
-            return
-
-        if await self._handle_force_operation(message):
             return
 
         submission_ch = self._get_configured_channel("TOMAK_SUBMISSION_ID")

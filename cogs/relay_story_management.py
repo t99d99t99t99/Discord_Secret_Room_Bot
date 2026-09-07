@@ -20,7 +20,11 @@ class RelayStoryManagement(commands.Cog):
         if message.author.bot:
             return
 
-        if message.channel.id != int(os.getenv("RELAY_STORY_ID")):
+        # A fresh server has no relay story until an administrator configures one.
+        relay_story_id = os.getenv("RELAY_STORY_ID")
+        if relay_story_id is None or not relay_story_id.isdecimal():
+            return
+        if message.channel.id != int(relay_story_id):
             return
 
         content = message.content
@@ -42,14 +46,16 @@ class RelayStoryManagement(commands.Cog):
                 await message.author.send(warn_template.format(content=content))
             except discord.Forbidden:
                 pass
-            log_thread = self.bot.get_channel(int(os.getenv("LOG_THREAD_ID")))
+            log_thread_id = os.getenv("LOG_THREAD_ID")
+            log_thread = self.bot.get_channel(int(log_thread_id)) if log_thread_id and log_thread_id.isdecimal() else None
             reason = "200자 초과" if len(content) > 200 else "연속 작성"
-            await log_thread.send(
-                f"[이야기잇기 규칙 위반] {message.author.mention}의 메시지가 삭제되었습니다. (사유: {reason})"
-            )
+            if log_thread is not None:
+                await log_thread.send(
+                    f"[이야기잇기 규칙 위반] {message.author.mention}의 메시지가 삭제되었습니다. (사유: {reason})"
+                )
             return
 
-        reward = await grant_relay_secret_reward(self.bot.db, message.author.id, message.id)
+        reward = await grant_relay_secret_reward(self.bot.db, message.guild.id, message.author.id, message.id)
         if reward.get("awarded"):
             lines = ["이야기잇기에 참여하여 모든 비밀이 **1.05배**가 되었습니다."]
             for key in SECRETS:

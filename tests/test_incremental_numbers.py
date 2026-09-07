@@ -176,7 +176,7 @@ class PendingRewardTests(unittest.IsolatedAsyncioTestCase):
             ) as mark,
         ):
             summary = await incremental_db.retry_pending_submission_rewards(
-                pool, "kyohoon"
+                pool, 10, "kyohoon"
             )
 
         self.assertEqual(summary, {"awarded": 0, "already_awarded": 1, "failed": []})
