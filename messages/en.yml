@@ -179,6 +179,7 @@ admin.queue.channels_changed: "Channels changed. Open a new submission thread be
 admin.queue.channels_prompt: "Redirect this queue? Existing submissions remain associated with their original thread."
 admin.queue.submission_policy_invalid: "Enter valid character limits and a submission period."
 admin.queue.submission_policy_done: "Submission policy updated."
+admin.queue.submission_policy_long_prompt: "The {maximum}-character submission limit exceeds Discord's 2,000-character message limit. Long submissions will be split into consecutive messages when published. Continue?"
 admin.queue.paused: "Queue paused; pending submissions were retained."
 admin.queue.resumed: "Queue resumed. Use open-submissions if it has no active submission thread."
 admin.queue.archived: "Queue archived. Its submissions and publication history were preserved."

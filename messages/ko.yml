@@ -179,6 +179,7 @@ admin.queue.channels_changed: "채널을 변경했습니다. 신청을 받기 �
 admin.queue.channels_prompt: "이 대기열의 채널을 변경할까요? 기존 신청은 원래 스레드와 연결된 상태로 유지됩니다."
 admin.queue.submission_policy_invalid: "글자 수 제한과 신청 기간을 올바르게 입력해 주세요."
 admin.queue.submission_policy_done: "신청 정책을 변경했습니다."
+admin.queue.submission_policy_long_prompt: "신청 최대 {maximum}자는 Discord 메시지 제한인 2,000자를 초과합니다. 긴 신청은 게시할 때 연속된 여러 메시지로 나뉩니다. 계속할까요?"
 admin.queue.paused: "대기열을 일시 정지했습니다. 대기 중인 신청은 유지됩니다."
 admin.queue.resumed: "대기열을 재개했습니다. 활성 신청 스레드가 없으면 open-submissions를 사용하세요."
 admin.queue.archived: "대기열을 보관했습니다. 신청 및 게시 기록은 유지됩니다."

@@ -592,9 +592,22 @@ class Admin(commands.Cog):
         period = None if clear_submission_period else (submission_period_hours if submission_period_hours is not None else queue["submission_period_hours"])
         if minimum is not None and minimum < 0 or maximum is not None and maximum < 0 or minimum is not None and maximum is not None and minimum > maximum or period is not None and period < 1:
             await interaction.response.send_message(text("admin.queue.submission_policy_invalid", await interaction_locale(interaction)), ephemeral=True); return
-        await self.bot.db.execute("UPDATE notice_queues SET min_content_length=$2,max_content_length=$3,submission_period_hours=$4,allow_attachments=COALESCE($5,allow_attachments),allow_links=COALESCE($6,allow_links),allow_edits=COALESCE($7,allow_edits),no_entry_action=COALESCE($8,no_entry_action),config_version=config_version+1,updated_at=NOW() WHERE id=$1", queue_id, minimum, maximum, period, allow_attachments, allow_links, allow_edits, no_entry_action.value if no_entry_action else None)
-        await self._audit(interaction, "notice_submission_policy_changed", "notice_queue", {"queue_id": queue_id}, {"minimum": minimum, "maximum": maximum, "period_hours": period, "attachments": allow_attachments, "links": allow_links, "edits": allow_edits})
-        await interaction.response.send_message(text("admin.queue.submission_policy_done", await interaction_locale(interaction)), ephemeral=True)
+        locale = await interaction_locale(interaction)
+
+        async def apply():
+            await self.bot.db.execute("UPDATE notice_queues SET min_content_length=$2,max_content_length=$3,submission_period_hours=$4,allow_attachments=COALESCE($5,allow_attachments),allow_links=COALESCE($6,allow_links),allow_edits=COALESCE($7,allow_edits),no_entry_action=COALESCE($8,no_entry_action),config_version=config_version+1,updated_at=NOW() WHERE id=$1", queue_id, minimum, maximum, period, allow_attachments, allow_links, allow_edits, no_entry_action.value if no_entry_action else None)
+            await self._audit(interaction, "notice_submission_policy_changed", "notice_queue", {"queue_id": queue_id}, {"minimum": minimum, "maximum": maximum, "period_hours": period, "attachments": allow_attachments, "links": allow_links, "edits": allow_edits})
+            return text("admin.queue.submission_policy_done", locale)
+
+        if maximum_characters is not None and maximum_characters > 2_000:
+            await self._confirm(
+                interaction,
+                text("admin.queue.submission_policy_long_prompt", locale, maximum=maximum),
+                apply,
+            )
+            return
+        await apply()
+        await interaction.response.send_message(text("admin.queue.submission_policy_done", locale), ephemeral=True)
 
     @queue.command(name="pause", description="Pause a notice queue.")
     async def queue_pause(self, interaction: discord.Interaction, queue_id: int):

@@ -17,6 +17,16 @@ from discord.ext import commands, tasks
 from .game_config import game_enabled
 from .localization import guild_locale, text
 
+DISCORD_MESSAGE_MAX_LENGTH = 2_000
+
+
+def split_discord_message_content(content: str) -> list[str]:
+    """Split publication content without dropping characters."""
+    return [
+        content[offset:offset + DISCORD_MESSAGE_MAX_LENGTH]
+        for offset in range(0, len(content), DISCORD_MESSAGE_MAX_LENGTH)
+    ] or [""]
+
 
 def valid_timezone(value: str) -> bool:
     try:
@@ -292,8 +302,15 @@ class NoticeQueueService(commands.Cog):
             author = source_message.author.display_name if queue["attribution_policy"] == "display_name" else ""
             title, content = self._render_publication(queue, author, source_message.content)
             files = [await attachment.to_file() for attachment in source_message.attachments]
-            created = await destination.create_thread(name=title[:100] or queue["display_name"], content=content, files=files)
+            content_chunks = split_discord_message_content(content)
+            created = await destination.create_thread(
+                name=title[:100] or queue["display_name"],
+                content=content_chunks[0],
+                files=files,
+            )
             publication = created.thread if hasattr(created, "thread") else created
+            for content_chunk in content_chunks[1:]:
+                await publication.send(content_chunk)
             await self.bot.db.execute("UPDATE notice_submissions SET status='published',published_at=NOW(),publication_channel_id=$2,publication_thread_id=$3,reward_state=$4 WHERE id=$1", submission["id"], destination.id, publication.id, "pending" if queue["reward_policy"].get("type") != "none" else "not_applicable")
             await self._issue_legacy_reward(queue, submission, source_message, publication)
             # A successful publication advances the queue into its next

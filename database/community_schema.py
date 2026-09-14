@@ -194,6 +194,8 @@ async def initialize_notice_schema(conn) -> None:
             schedule_weekday SMALLINT CHECK(schedule_weekday BETWEEN 0 AND 6),
             timezone TEXT NOT NULL DEFAULT 'UTC',
             per_member_limit INTEGER NOT NULL DEFAULT 1 CHECK(per_member_limit > 0),
+            min_content_length INTEGER CHECK(min_content_length >= 0),
+            max_content_length INTEGER DEFAULT 2000 CHECK(max_content_length >= min_content_length),
             selection_policy TEXT NOT NULL DEFAULT 'oldest'
                 CHECK(selection_policy IN ('oldest', 'random', 'fair')),
             attribution_policy TEXT NOT NULL DEFAULT 'display_name'
@@ -235,6 +237,7 @@ async def initialize_notice_schema(conn) -> None:
     for statement in (
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS min_content_length INTEGER CHECK(min_content_length >= 0)",
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS max_content_length INTEGER CHECK(max_content_length >= min_content_length)",
+        "ALTER TABLE notice_queues ALTER COLUMN max_content_length SET DEFAULT 2000",
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS allow_attachments BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS allow_links BOOLEAN NOT NULL DEFAULT TRUE",
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS allow_edits BOOLEAN NOT NULL DEFAULT TRUE",

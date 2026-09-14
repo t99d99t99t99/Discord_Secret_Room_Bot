@@ -52,6 +52,15 @@ class CommunityFeatureTests(unittest.IsolatedAsyncioTestCase):
             ("Weekly Notes — Ada", "By Ada:\\nA contribution"),
         )
 
+    def test_long_publication_content_is_split_without_loss(self):
+        from cogs.notice_queues import split_discord_message_content
+
+        content = "x" * 4_001
+        chunks = split_discord_message_content(content)
+
+        self.assertEqual([len(chunk) for chunk in chunks], [2_000, 2_000, 1])
+        self.assertEqual("".join(chunks), content)
+
     async def test_reply_moderation_is_not_captured_as_queue_or_story_content(self):
         class FailDb:
             async def fetchrow(self, *args):
