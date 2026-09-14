@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from cogs.secretae_incremental.constants import HEART
+from cogs.secretae_incremental.game import _concentration_completion_text
 from cogs.secretae_incremental.db import (
     concentration_gain,
     concentration_week_start,
@@ -111,6 +112,15 @@ class LayeredDecimalTests(unittest.TestCase):
 
 
 class GameDateTests(unittest.TestCase):
+    def test_concentration_completion_includes_awarded_essence(self):
+        message = _concentration_completion_text(
+            "MyMember", N.of(4), N.of(12), N.of(16)
+        )
+
+        self.assertIn("농축을 완료했습니다", message)
+        self.assertIn("16 ←", message)
+        self.assertIn("+ 12", message)
+
     def test_kst_five_am_boundary(self):
         self.assertEqual(
             game_date(datetime(2026, 1, 1, 19, 59, tzinfo=timezone.utc)).isoformat(),

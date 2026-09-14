@@ -97,6 +97,8 @@ game.price.reset: "Concentration resets secret shards, all organisms, and all se
 game.concentration.title: "**{title}**"
 game.concentration.line: "Story essence {after} ← {before} + {gain}"
 game.concentration.scheduled: "Concentration planned"
+game.concentration.completed: "Concentration complete"
+game.concentration.confirmed: "Concentration is complete."
 game.concentration.reset: "Secret shards, organisms, and all secrets will be reset."
 game.concentration.unavailable: "Concentration resets at Monday 05:00 KST."
 game.concentration.no_gain: "Concentration would not grant any essence."

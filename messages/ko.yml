@@ -97,6 +97,8 @@ game.price.reset: "농축을 실행하면 비밀 파편, 모든 유기체, 모�
 game.concentration.title: "**{title}**"
 game.concentration.line: "이야기의 정수 {after} ← {before} + {gain}"
 game.concentration.scheduled: "농축 예정"
+game.concentration.completed: "농축 완료"
+game.concentration.confirmed: "농축이 완료되었습니다."
 game.concentration.reset: "비밀 파편, 유기체, 모든 비밀이 초기화됩니다."
 game.concentration.unavailable: "농축은 매주 월요일 오전 5시(KST)에 초기화됩니다."
 game.concentration.no_gain: "농축으로 얻을 정수가 없습니다."

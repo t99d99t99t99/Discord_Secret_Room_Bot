@@ -117,6 +117,22 @@ def _concentration_text(before, gain, after, title, locale="ko"):
     )
 
 
+def _concentration_completion_text(display_name, before, gain, after, locale="ko"):
+    """Render the public completion notice, including the awarded Essence."""
+    return "\n".join(
+        (
+            text("game.concentration.complete", locale, name=display_name),
+            _concentration_text(
+                before,
+                gain,
+                after,
+                text("game.concentration.completed", locale),
+                locale,
+            ),
+        )
+    )
+
+
 def _key(value):
     """표시 기호, 한국어 이름 또는 저장 키를 비밀 키로 해석합니다."""
     value = value.strip()
@@ -465,10 +481,25 @@ class ConcentrationView(discord.ui.View):
         """사용자 확인 후 농축을 다시 계산하고 커밋합니다."""
         try:
             await interaction.response.defer()
-            await concentrate(self.cog.bot.db, self.guild_id, interaction.user.id)
+            gain, before, after = await concentrate(
+                self.cog.bot.db, self.guild_id, interaction.user.id
+            )
             self.stop()
-            await interaction.followup.send(
-                text("game.concentration.complete", self.locale, name=interaction.user.display_name)
+            try:
+                await interaction.message.edit(
+                    content=text("game.concentration.confirmed", self.locale), view=None
+                )
+            except discord.HTTPException:
+                pass
+
+            # A webhook follow-up to a component interaction can inherit the
+            # private confirmation as its message reference.  Send directly to
+            # the channel instead, so the public result is never a reply to an
+            # ephemeral (and therefore deleted-for-others) message.
+            await interaction.channel.send(
+                _concentration_completion_text(
+                    interaction.user.display_name, before, gain, after, self.locale
+                )
             )
         except ValueError as error:
             if interaction.response.is_done():

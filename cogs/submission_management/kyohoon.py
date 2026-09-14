@@ -18,6 +18,7 @@ from .common import (
     get_channel as _get_channel,
     get_latest_bot_thread as _get_latest_thread,
     schedule_update_enabled,
+    split_discord_message_content,
     SubmissionManagementCog,
     toggle_schedule_update,
 )
@@ -214,12 +215,18 @@ class KyohoonManagement(SubmissionManagementCog):
         week  = _week_of_month(now_kst.date())
         title = f"{now_kst.month}월 {week}주차, {submission_msg.author.display_name}"
         files = [await attachment.to_file() for attachment in submission_msg.attachments]
+        content_chunks = split_discord_message_content(submission_msg.content)
         created = await notify_ch.create_thread(
             name=title,
-            content=submission_msg.content,
+            content=content_chunks[0],
             files=files,
         )
         publication_thread = _created_thread(created)
+
+        # The forum post is limited to 2,000 characters.  Publish all overflow
+        # before sending the reward notice so the submission remains contiguous.
+        for content_chunk in content_chunks[1:]:
+            await publication_thread.send(content_chunk)
 
         # DB 갱신 및 관리 메시지 표시 갱신
         try:

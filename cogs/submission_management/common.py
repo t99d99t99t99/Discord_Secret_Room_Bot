@@ -8,6 +8,15 @@ from discord.ext import commands
 
 KST = datetime.timezone(datetime.timedelta(hours=9))
 SCHEDULE_NAMES = {"kyohoon", "tomak"}
+DISCORD_MESSAGE_MAX_LENGTH = 2000
+
+
+def split_discord_message_content(content: str) -> list[str]:
+    """Split content into Discord-sized chunks without dropping characters."""
+    return [
+        content[offset:offset + DISCORD_MESSAGE_MAX_LENGTH]
+        for offset in range(0, len(content), DISCORD_MESSAGE_MAX_LENGTH)
+    ] or [""]
 
 
 async def get_latest_bot_thread(channel, bot_user_id: int) -> discord.Thread | None:
