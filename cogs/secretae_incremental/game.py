@@ -114,6 +114,16 @@ def _concentration_text(before, gain, after, title):
     )
 
 
+def _concentration_completion_text(display_name, before, gain, after):
+    """Render the public completion notice, including the awarded Essence."""
+    return "\n".join(
+        (
+            f"{display_name} 님이 모든 비밀 파편, 비밀, 비밀 유기체를 희생하여 농축을 완료했습니다!",
+            _concentration_text(before, gain, after, "농축 완료"),
+        )
+    )
+
+
 def _key(value):
     """표시 기호, 한국어 이름 또는 저장 키를 비밀 키로 해석합니다."""
     value = value.strip()
@@ -415,10 +425,21 @@ class ConcentrationView(discord.ui.View):
         """사용자 확인 후 농축을 다시 계산하고 커밋합니다."""
         try:
             await interaction.response.defer()
-            await concentrate(self.cog.bot.db, interaction.user.id)
+            gain, before, after = await concentrate(self.cog.bot.db, interaction.user.id)
             self.stop()
-            await interaction.followup.send(
-                f"{interaction.user.display_name} 님이 모든 비밀 파편, 비밀, 비밀 유기체를 희생하여 농축을 완료했습니다!"
+            try:
+                await interaction.message.edit(content="농축이 완료되었습니다.", view=None)
+            except discord.HTTPException:
+                pass
+
+            # A webhook follow-up to a component interaction can inherit the
+            # private confirmation as its message reference.  Send directly to
+            # the channel instead, so the public result is never a reply to an
+            # ephemeral (and therefore deleted-for-others) message.
+            await interaction.channel.send(
+                _concentration_completion_text(
+                    interaction.user.display_name, before, gain, after
+                )
             )
         except ValueError as error:
             if interaction.response.is_done():
