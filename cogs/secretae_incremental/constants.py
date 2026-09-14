@@ -1,4 +1,4 @@
-"""변경할 수 없는 게임 키와 한국어 표시 데이터를 정의합니다."""
+"""Immutable game keys, symbols, and localized legacy display data."""
 
 from types import MappingProxyType
 
@@ -65,4 +65,4 @@ INITIAL_ORGANICS = 1
 # Keep it centralised so the runtime and deterministic simulator cannot drift.
 PRODUCTION_DIVISOR = 77
 
-SHARD_SYMBOL = "✨"  # 빛나는 파편
+SHARD_SYMBOL = "✨"  # Spendable shard resource symbol.

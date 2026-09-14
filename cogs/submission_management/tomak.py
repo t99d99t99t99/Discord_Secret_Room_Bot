@@ -24,6 +24,7 @@ from .common import (
     SubmissionManagementCog,
     toggle_schedule_update,
 )
+
 TOMAK_MAX_SUBMISSIONS_PER_THREAD = 10
 TOMAK_MIN_LENGTH = 20
 TOMAK_MAX_LENGTH = 300
@@ -61,8 +62,8 @@ def _is_invalid_tomak_submission(message: discord.Message) -> tuple[bool, int]:
 class TomakManagement(SubmissionManagementCog):
     def __init__(self, bot):
         super().__init__(bot)
-        with open('assets/message.yaml', encoding='utf-8') as f:
-            self._msgs = yaml.safe_load(f)['tomak']
+        with open("assets/message.yaml", encoding="utf-8") as f:
+            self._msgs = yaml.safe_load(f)["tomak"]
         self.update_Tomak.start()
 
     def cog_unload(self):
@@ -94,14 +95,17 @@ class TomakManagement(SubmissionManagementCog):
             if count is None:
                 count = await self.bot.db.fetchval(
                     "SELECT COUNT(*) FROM tomak_submissions WHERE thread_id = $1 AND user_id = $2",
-                    latest_thread.id, msg.author.id,
+                    latest_thread.id,
+                    msg.author.id,
                 )
             if count >= TOMAK_MAX_SUBMISSIONS_PER_THREAD:
                 continue
             await self.bot.db.execute(
                 "INSERT INTO tomak_submissions(thread_id, user_id, message_id) "
                 "VALUES($1, $2, $3) ON CONFLICT DO NOTHING",
-                latest_thread.id, msg.author.id, msg.id,
+                latest_thread.id,
+                msg.author.id,
+                msg.id,
             )
             seen_counts[msg.author.id] = count + 1
 
@@ -117,7 +121,9 @@ class TomakManagement(SubmissionManagementCog):
         await self._execute_tomak_update("자동", None)
 
     async def _retry_pending_rewards(self, trigger: str):
-        summary = await retry_pending_submission_rewards(self.bot.db, _legacy_guild_id(), "tomak")
+        summary = await retry_pending_submission_rewards(
+            self.bot.db, _legacy_guild_id(), "tomak"
+        )
         if summary["awarded"] or summary["already_awarded"] or summary["failed"]:
             await self._send_log_thread_message(
                 "[토막상식 보상 재시도]\n"
@@ -132,7 +138,9 @@ class TomakManagement(SubmissionManagementCog):
     async def before_update_Tomak(self):
         await self.bot.wait_until_ready()
 
-    async def _execute_tomak_update(self, trigger: str, operator, raise_errors: bool = True) -> bool:
+    async def _execute_tomak_update(
+        self, trigger: str, operator, raise_errors: bool = True
+    ) -> bool:
         started_at = datetime.datetime.now(KST)
         submission_ch = self._get_configured_channel("TOMAK_SUBMISSION_ID")
         notify_ch = self._get_configured_channel("TOMAK_NOTIFY_ID")
@@ -141,10 +149,19 @@ class TomakManagement(SubmissionManagementCog):
         async with self._update_lock:
             try:
                 return await self._run_tomak_update(
-                    started_at, submission_ch, notify_ch, mgmt_thread, trigger, operator,
+                    started_at,
+                    submission_ch,
+                    notify_ch,
+                    mgmt_thread,
+                    trigger,
+                    operator,
                 )
             except Exception as exc:
-                tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5))
+                tb = "".join(
+                    traceback.format_exception(
+                        type(exc), exc, exc.__traceback__, limit=5
+                    )
+                )
                 await self._send_log_thread_message(
                     "[토막상식 갱신 실패]\n"
                     f"- 실행 방식: {trigger}\n"
@@ -160,7 +177,9 @@ class TomakManagement(SubmissionManagementCog):
                     raise
                 return False
 
-    async def _run_tomak_update(self, started_at, submission_ch, notify_ch, mgmt_thread, trigger, operator):
+    async def _run_tomak_update(
+        self, started_at, submission_ch, notify_ch, mgmt_thread, trigger, operator
+    ):
         if submission_ch is None or notify_ch is None or mgmt_thread is None:
             await self._send_log_thread_message(
                 "[토막상식 갱신 실패]\n"
@@ -176,7 +195,9 @@ class TomakManagement(SubmissionManagementCog):
 
         latest_sub_thread = await _get_latest_thread(submission_ch, self.bot.user.id)
         if latest_sub_thread is None:
-            created_thread = await self._create_tomak_submission_thread(submission_ch, started_at)
+            created_thread = await self._create_tomak_submission_thread(
+                submission_ch, started_at
+            )
             await self._send_log_thread_message(
                 "[토막상식 신청 스레드 생성]\n"
                 f"- 실행 방식: {trigger}\n"
@@ -194,7 +215,9 @@ class TomakManagement(SubmissionManagementCog):
             "WHERE posted_at IS NULL ORDER BY submitted_at",
         )
         if not unposted:
-            created_thread = await self._create_tomak_submission_thread(submission_ch, started_at)
+            created_thread = await self._create_tomak_submission_thread(
+                submission_ch, started_at
+            )
             await self._send_log_thread_message(
                 "[토막상식 신청 스레드 생성]\n"
                 f"- 실행 방식: {trigger}\n"
@@ -213,31 +236,46 @@ class TomakManagement(SubmissionManagementCog):
         while unposted:
             priorities = []
             for row in unposted:
-                last = await self.bot.db.fetchval(
-                    "SELECT MAX(posted_at) FROM tomak_submissions "
-                    "WHERE user_id = $1 AND posted_at IS NOT NULL",
-                    row["user_id"],
-                ) or epoch
+                last = (
+                    await self.bot.db.fetchval(
+                        "SELECT MAX(posted_at) FROM tomak_submissions "
+                        "WHERE user_id = $1 AND posted_at IS NOT NULL",
+                        row["user_id"],
+                    )
+                    or epoch
+                )
                 priorities.append((last, row["submitted_at"], row["message_id"], row))
             selected = min(priorities, key=lambda item: (item[0], item[1], item[2]))[3]
 
-            source_thread = await _get_thread_by_id(submission_ch, selected["thread_id"], self.bot.user.id)
+            source_thread = await _get_thread_by_id(
+                submission_ch, selected["thread_id"], self.bot.user.id
+            )
             if source_thread is None:
                 await self.bot.db.execute(
                     "DELETE FROM tomak_submissions WHERE message_id = $1",
                     selected["message_id"],
                 )
-                unposted = [row for row in unposted if row["message_id"] != selected["message_id"]]
+                unposted = [
+                    row
+                    for row in unposted
+                    if row["message_id"] != selected["message_id"]
+                ]
                 continue
             try:
-                submission_msg = await source_thread.fetch_message(selected["message_id"])
+                submission_msg = await source_thread.fetch_message(
+                    selected["message_id"]
+                )
                 break
             except discord.NotFound:
                 await self.bot.db.execute(
                     "DELETE FROM tomak_submissions WHERE message_id = $1",
                     selected["message_id"],
                 )
-                unposted = [row for row in unposted if row["message_id"] != selected["message_id"]]
+                unposted = [
+                    row
+                    for row in unposted
+                    if row["message_id"] != selected["message_id"]
+                ]
 
         if source_thread is None:
             await self._send_log_thread_message(
@@ -267,7 +305,9 @@ class TomakManagement(SubmissionManagementCog):
 
         now_kst = datetime.datetime.now(KST)
         title = _tomak_post_title(now_kst, submission_msg.author.display_name)
-        files = [await attachment.to_file() for attachment in submission_msg.attachments]
+        files = [
+            await attachment.to_file() for attachment in submission_msg.attachments
+        ]
         created = await notify_ch.create_thread(
             name=title,
             content=submission_msg.content,
@@ -279,7 +319,9 @@ class TomakManagement(SubmissionManagementCog):
             await self.bot.db.execute(
                 "UPDATE tomak_submissions SET posted_at = $1, reward_posted_thread_id = $2, "
                 "rewarded_at = NULL WHERE message_id = $3",
-                now_kst, publication_thread.id, selected["message_id"],
+                now_kst,
+                publication_thread.id,
+                selected["message_id"],
             )
         except Exception as exc:
             await self._send_log_thread_message(
@@ -311,7 +353,9 @@ class TomakManagement(SubmissionManagementCog):
                 )
             try:
                 await publication_thread.send(
-                    self._format_tomak_reward(reward, submission_msg.author.display_name)
+                    self._format_tomak_reward(
+                        reward, submission_msg.author.display_name
+                    )
                 )
             except discord.HTTPException as exc:
                 await self._send_log_thread_message(
@@ -319,7 +363,9 @@ class TomakManagement(SubmissionManagementCog):
                 )
 
         try:
-            await self._update_management_message(mgmt_thread, source_thread.id, source_thread.name)
+            await self._update_management_message(
+                mgmt_thread, source_thread.id, source_thread.name
+            )
         except discord.HTTPException as exc:
             await self._send_log_thread_message(
                 f"[토막상식 관리 메시지 갱신 실패] 게시 상태는 저장되었습니다. ({type(exc).__name__}: {exc})"
@@ -329,8 +375,13 @@ class TomakManagement(SubmissionManagementCog):
             "SELECT COUNT(*) FROM tomak_submissions WHERE posted_at IS NULL",
         )
         created_submission_thread = None
-        if remaining < TOMAK_NEW_THREAD_THRESHOLD and latest_sub_thread.id == source_thread.id:
-            created_submission_thread = await self._create_tomak_submission_thread(submission_ch, now_kst)
+        if (
+            remaining < TOMAK_NEW_THREAD_THRESHOLD
+            and latest_sub_thread.id == source_thread.id
+        ):
+            created_submission_thread = await self._create_tomak_submission_thread(
+                submission_ch, now_kst
+            )
 
         await self._send_log_thread_message(
             "[토막상식 갱신 성공]\n"
@@ -362,7 +413,11 @@ class TomakManagement(SubmissionManagementCog):
 
     async def _handle_force_operation(self, message) -> bool:
         command = message.content.strip()
-        if command not in ("!force_tomak_update", "!force_tomak_submission", "!toggle_tomak"):
+        if command not in (
+            "!force_tomak_update",
+            "!force_tomak_submission",
+            "!toggle_tomak",
+        ):
             return False
 
         force_thread = self._get_configured_channel("FORCE_OPERATION_ID")
@@ -384,11 +439,13 @@ class TomakManagement(SubmissionManagementCog):
             return True
 
         if command == "!force_tomak_update":
-            ok = await self._execute_tomak_update("강제", message.author, raise_errors=False)
+            ok = await self._execute_tomak_update(
+                "강제", message.author, raise_errors=False
+            )
             await message.channel.send(
                 "토막상식 갱신을 강제로 실행했습니다. 상세 결과는 LOG_THREAD를 확인해 주세요."
-                if ok else
-                "토막상식 갱신 강제 실행에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요."
+                if ok
+                else "토막상식 갱신 강제 실행에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요."
             )
             return True
 
@@ -401,13 +458,19 @@ class TomakManagement(SubmissionManagementCog):
                 f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
                 "- 사유: TOMAK_SUBMISSION_ID 채널을 찾지 못했습니다."
             )
-            await message.channel.send("토막상식 신청 스레드 강제 생성에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요.")
+            await message.channel.send(
+                "토막상식 신청 스레드 강제 생성에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요."
+            )
             return True
 
         try:
-            new_thread = await self._create_tomak_submission_thread(submission_ch, started_at)
+            new_thread = await self._create_tomak_submission_thread(
+                submission_ch, started_at
+            )
         except Exception as exc:
-            tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5))
+            tb = "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5)
+            )
             await self._send_log_thread_message(
                 "[토막상식 신청 스레드 강제 생성 실패]\n"
                 f"- 실행자: {message.author.mention}\n"
@@ -416,7 +479,9 @@ class TomakManagement(SubmissionManagementCog):
                 f"- 사유: 예외 발생 (`{type(exc).__name__}: {exc}`)\n"
                 f"```py\n{tb[-1500:]}\n```"
             )
-            await message.channel.send("토막상식 신청 스레드 강제 생성에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요.")
+            await message.channel.send(
+                "토막상식 신청 스레드 강제 생성에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요."
+            )
             return True
 
         await self._send_log_thread_message(
@@ -426,7 +491,9 @@ class TomakManagement(SubmissionManagementCog):
             f"- 신청 채널: {_channel_detail(submission_ch)}\n"
             f"- 생성된 스레드: {new_thread.mention} (`{new_thread.id}`, {new_thread.name})"
         )
-        await message.channel.send(f"토막상식 신청 스레드를 강제로 생성했습니다: {new_thread.mention}")
+        await message.channel.send(
+            f"토막상식 신청 스레드를 강제로 생성했습니다: {new_thread.mention}"
+        )
         return True
 
     # ------------------------------------------------------------------ #
@@ -441,7 +508,9 @@ class TomakManagement(SubmissionManagementCog):
         if thread.owner_id == self.bot.user.id:
             return
         try:
-            await thread.delete(reason="Only bot-created Tomak submission threads are allowed")
+            await thread.delete(
+                reason="Only bot-created Tomak submission threads are allowed"
+            )
         except discord.HTTPException:
             await self._send_log_thread_message(
                 f"[토막상식 신청 스레드 삭제 실패] 비공식 스레드 `{thread.id}`를 삭제하지 못했습니다."
@@ -467,7 +536,9 @@ class TomakManagement(SubmissionManagementCog):
         author = message.author
 
         if latest_thread is None or message.channel.id != latest_thread.id:
-            await self._delete_and_dm(message, self._msgs["not_latest_thread"].format(content=content))
+            await self._delete_and_dm(
+                message, self._msgs["not_latest_thread"].format(content=content)
+            )
             if log_thread:
                 await log_thread.send(
                     f"[토막상식 신청 위반] {author.mention}이 만료된 스레드 **{message.channel.name}**에 신청하려 했습니다."
@@ -489,10 +560,13 @@ class TomakManagement(SubmissionManagementCog):
 
         count = await self.bot.db.fetchval(
             "SELECT COUNT(*) FROM tomak_submissions WHERE thread_id = $1 AND user_id = $2",
-            message.channel.id, author.id,
+            message.channel.id,
+            author.id,
         )
         if count >= TOMAK_MAX_SUBMISSIONS_PER_THREAD:
-            await self._delete_and_dm(message, self._msgs["too_many_submissions"].format(content=content))
+            await self._delete_and_dm(
+                message, self._msgs["too_many_submissions"].format(content=content)
+            )
             if log_thread:
                 await log_thread.send(
                     f"[토막상식 신청 초과] {author.mention}이 한 스레드에 10개를 초과해 신청하려 했습니다."
@@ -502,10 +576,14 @@ class TomakManagement(SubmissionManagementCog):
         await self.bot.db.execute(
             "INSERT INTO tomak_submissions(thread_id, user_id, message_id) VALUES($1, $2, $3) "
             "ON CONFLICT (message_id) DO NOTHING",
-            message.channel.id, author.id, message.id,
+            message.channel.id,
+            author.id,
+            message.id,
         )
         if mgmt_thread:
-            await self._update_management_message(mgmt_thread, message.channel.id, message.channel.name)
+            await self._update_management_message(
+                mgmt_thread, message.channel.id, message.channel.name
+            )
 
     async def _delete_and_dm(self, message, dm_content: str):
         try:
@@ -528,15 +606,22 @@ class TomakManagement(SubmissionManagementCog):
             return
         user_id_str = author_data.get("id")
         if user_id_str:
-            await self._check_posted_modification(payload.channel_id, payload.message_id, int(user_id_str))
-        await self._remove_invalid_edited_submission(payload.channel_id, payload.message_id)
+            await self._check_posted_modification(
+                payload.channel_id, payload.message_id, int(user_id_str)
+            )
+        await self._remove_invalid_edited_submission(
+            payload.channel_id, payload.message_id
+        )
 
     async def _remove_invalid_edited_submission(self, channel_id: int, message_id: int):
         submission_ch = self._get_configured_channel("TOMAK_SUBMISSION_ID")
         if submission_ch is None:
             return
         channel = await _get_channel(self.bot, channel_id)
-        if not isinstance(channel, discord.Thread) or channel.parent_id != submission_ch.id:
+        if (
+            not isinstance(channel, discord.Thread)
+            or channel.parent_id != submission_ch.id
+        ):
             return
 
         latest_thread = await _get_latest_thread(submission_ch, self.bot.user.id)
@@ -569,12 +654,16 @@ class TomakManagement(SubmissionManagementCog):
         mgmt_thread = self._get_configured_channel("TOMAK_MANAGEMENT_ID")
         if mgmt_thread:
             try:
-                await self._update_management_message(mgmt_thread, channel.id, channel.name)
+                await self._update_management_message(
+                    mgmt_thread, channel.id, channel.name
+                )
             except discord.HTTPException:
                 pass
         try:
             await message.author.send(
-                self._msgs["invalid_length"].format(content=message.content, length=length),
+                self._msgs["invalid_length"].format(
+                    content=message.content, length=length
+                ),
             )
         except discord.Forbidden:
             pass
@@ -584,19 +673,28 @@ class TomakManagement(SubmissionManagementCog):
         user_id = None
         if payload.cached_message and not payload.cached_message.author.bot:
             user_id = payload.cached_message.author.id
-        await self._delete_submission_on_message_delete(payload.channel_id, payload.message_id, user_id)
+        await self._delete_submission_on_message_delete(
+            payload.channel_id, payload.message_id, user_id
+        )
 
     @commands.Cog.listener()
     async def on_raw_bulk_message_delete(self, payload):
         for message_id in payload.message_ids:
-            await self._delete_submission_on_message_delete(payload.channel_id, message_id, None)
+            await self._delete_submission_on_message_delete(
+                payload.channel_id, message_id, None
+            )
 
-    async def _delete_submission_on_message_delete(self, channel_id: int, message_id: int, user_id: int | None):
+    async def _delete_submission_on_message_delete(
+        self, channel_id: int, message_id: int, user_id: int | None
+    ):
         submission_ch = self._get_configured_channel("TOMAK_SUBMISSION_ID")
         if submission_ch is None:
             return
         channel = await _get_channel(self.bot, channel_id)
-        if not isinstance(channel, discord.Thread) or channel.parent_id != submission_ch.id:
+        if (
+            not isinstance(channel, discord.Thread)
+            or channel.parent_id != submission_ch.id
+        ):
             return
 
         row = await self.bot.db.fetchrow(
@@ -608,18 +706,25 @@ class TomakManagement(SubmissionManagementCog):
             mgmt_thread = self._get_configured_channel("TOMAK_MANAGEMENT_ID")
             if mgmt_thread:
                 try:
-                    await self._update_management_message(mgmt_thread, channel.id, channel.name)
+                    await self._update_management_message(
+                        mgmt_thread, channel.id, channel.name
+                    )
                 except discord.HTTPException:
                     pass
         if row is not None and row["posted_at"] is not None:
             await self._check_posted_modification(channel_id, message_id, user_id, row)
 
-    async def _check_posted_modification(self, channel_id: int, message_id: int, user_id: int | None, row=None):
+    async def _check_posted_modification(
+        self, channel_id: int, message_id: int, user_id: int | None, row=None
+    ):
         submission_ch = self._get_configured_channel("TOMAK_SUBMISSION_ID")
         if submission_ch is None:
             return
         channel = await _get_channel(self.bot, channel_id)
-        if not isinstance(channel, discord.Thread) or channel.parent_id != submission_ch.id:
+        if (
+            not isinstance(channel, discord.Thread)
+            or channel.parent_id != submission_ch.id
+        ):
             return
 
         latest_thread = await _get_latest_thread(submission_ch, self.bot.user.id)
@@ -653,7 +758,9 @@ class TomakManagement(SubmissionManagementCog):
     # 관리 메시지 갱신
     # ------------------------------------------------------------------ #
 
-    async def _update_management_message(self, mgmt_thread, thread_id: int, thread_name: str):
+    async def _update_management_message(
+        self, mgmt_thread, thread_id: int, thread_name: str
+    ):
         rows = await self.bot.db.fetch(
             "SELECT user_id, "
             "COUNT(*) AS total, "
@@ -671,12 +778,14 @@ class TomakManagement(SubmissionManagementCog):
             lines.append(
                 f"- <@{row['user_id']}> {row['total']}개 신청 / {row['posted']}개 게시 / {waiting}개 대기"
             )
-        lines.extend([
-            "",
-            f"총 신청: {total}개",
-            f"게시됨: {posted}개",
-            f"대기중: {total - posted}개",
-        ])
+        lines.extend(
+            [
+                "",
+                f"총 신청: {total}개",
+                f"게시됨: {posted}개",
+                f"대기중: {total - posted}개",
+            ]
+        )
         content = "\n".join(lines)
         if len(content) > 2000:
             content = "\n".join(lines[:45]) + "\n...(이하 생략)"
@@ -699,14 +808,19 @@ class TomakManagement(SubmissionManagementCog):
         await self.bot.db.execute(
             "INSERT INTO tomak_mgmt_messages(thread_id, message_id) VALUES($1, $2) "
             "ON CONFLICT(thread_id) DO UPDATE SET message_id = EXCLUDED.message_id",
-            thread_id, new_msg.id,
+            thread_id,
+            new_msg.id,
         )
 
-    def _format_tomak_reward(self, reward: dict, recipient_name: str | None = None) -> str:
+    def _format_tomak_reward(
+        self, reward: dict, recipient_name: str | None = None
+    ) -> str:
         """커밋된 비밀별 토막상식 보상을 DM 또는 공개 스레드용으로 렌더링합니다."""
         before = reward["before"]
         after = reward["after"]
-        recipient = f"{recipient_name} 님이 이 토막상식을 게시하여 " if recipient_name else ""
+        recipient = (
+            f"{recipient_name} 님이 이 토막상식을 게시하여 " if recipient_name else ""
+        )
         lines = [f"{recipient}모든 비밀이 2배가 되었습니다."]
         for key in SECRETS:
             old = format_amount(LayeredDecimal.from_json(before[key]))

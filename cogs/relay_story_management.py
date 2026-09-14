@@ -6,14 +6,15 @@ from .secretae_incremental.constants import SECRETS, SYMBOLS
 from .secretae_incremental.db import grant_relay_secret_reward
 from .secretae_incremental.numbers import LayeredDecimal, format_amount
 
+
 class RelayStoryManagement(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        with open('assets/message.yaml', encoding='utf-8') as f:
+        with open("assets/message.yaml", encoding="utf-8") as f:
             messages = yaml.safe_load(f)
-        self._warn_too_long = messages['relay_story']['too_long']
-        self._warn_consecutive = messages['relay_story']['consecutive']
+        self._warn_too_long = messages["relay_story"]["too_long"]
+        self._warn_consecutive = messages["relay_story"]["consecutive"]
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -47,7 +48,11 @@ class RelayStoryManagement(commands.Cog):
             except discord.Forbidden:
                 pass
             log_thread_id = os.getenv("LOG_THREAD_ID")
-            log_thread = self.bot.get_channel(int(log_thread_id)) if log_thread_id and log_thread_id.isdecimal() else None
+            log_thread = (
+                self.bot.get_channel(int(log_thread_id))
+                if log_thread_id and log_thread_id.isdecimal()
+                else None
+            )
             reason = "200자 초과" if len(content) > 200 else "연속 작성"
             if log_thread is not None:
                 await log_thread.send(
@@ -55,7 +60,9 @@ class RelayStoryManagement(commands.Cog):
                 )
             return
 
-        reward = await grant_relay_secret_reward(self.bot.db, message.guild.id, message.author.id, message.id)
+        reward = await grant_relay_secret_reward(
+            self.bot.db, message.guild.id, message.author.id, message.id
+        )
         if reward.get("awarded"):
             lines = ["이야기잇기에 참여하여 모든 비밀이 **1.05배**가 되었습니다."]
             for key in SECRETS:
@@ -66,6 +73,7 @@ class RelayStoryManagement(commands.Cog):
                 await message.author.send("\n".join(lines))
             except discord.Forbidden:
                 pass
+
 
 async def setup(bot):
     await bot.add_cog(RelayStoryManagement(bot))

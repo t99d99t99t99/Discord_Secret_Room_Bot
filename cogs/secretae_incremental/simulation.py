@@ -32,7 +32,9 @@ def seven_day_route(state, use_max=True, rewards_by_day=None, days=7):
     reward_results = []
     for day in range(days):
         for policy in rewards_by_day.get(day + 1, ()):
-            reward_results.append((day + 1, policy, community_reward_step(state, policy)))
+            reward_results.append(
+                (day + 1, policy, community_reward_step(state, policy))
+            )
         organic_gains.append(production_step(state))
         if use_max and day != days - 1:
             purchases.append(max_synthesis_step(state))

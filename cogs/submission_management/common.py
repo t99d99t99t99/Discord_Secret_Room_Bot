@@ -5,7 +5,6 @@ import asyncio
 import discord
 from discord.ext import commands
 
-
 KST = datetime.timezone(datetime.timedelta(hours=9))
 SCHEDULE_NAMES = {"kyohoon", "tomak"}
 DISCORD_MESSAGE_MAX_LENGTH = 2000
@@ -14,7 +13,7 @@ DISCORD_MESSAGE_MAX_LENGTH = 2000
 def split_discord_message_content(content: str) -> list[str]:
     """Split content into Discord-sized chunks without dropping characters."""
     return [
-        content[offset:offset + DISCORD_MESSAGE_MAX_LENGTH]
+        content[offset : offset + DISCORD_MESSAGE_MAX_LENGTH]
         for offset in range(0, len(content), DISCORD_MESSAGE_MAX_LENGTH)
     ] or [""]
 
@@ -24,10 +23,16 @@ async def get_latest_bot_thread(channel, bot_user_id: int) -> discord.Thread | N
     async for thread in channel.archived_threads(limit=None):
         threads.append(thread)
     official_threads = [thread for thread in threads if thread.owner_id == bot_user_id]
-    return max(official_threads, key=lambda thread: thread.created_at) if official_threads else None
+    return (
+        max(official_threads, key=lambda thread: thread.created_at)
+        if official_threads
+        else None
+    )
 
 
-async def get_bot_thread_by_id(channel, thread_id: int, bot_user_id: int) -> discord.Thread | None:
+async def get_bot_thread_by_id(
+    channel, thread_id: int, bot_user_id: int
+) -> discord.Thread | None:
     for thread in channel.threads:
         if thread.id == thread_id and thread.owner_id == bot_user_id:
             return thread
@@ -95,7 +100,10 @@ def has_admin_role(member) -> bool:
     if role_id is None:
         return False
     try:
-        return isinstance(member, discord.Member) and member.get_role(int(role_id)) is not None
+        return (
+            isinstance(member, discord.Member)
+            and member.get_role(int(role_id)) is not None
+        )
     except ValueError:
         return False
 

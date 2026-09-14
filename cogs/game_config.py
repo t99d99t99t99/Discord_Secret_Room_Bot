@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
-
-REWARD_TYPES = {"none", "essence_multiplier", "each_secret_multiplier", "production_multiplier", "fixed_essence"}
+REWARD_TYPES = {
+    "none",
+    "essence_multiplier",
+    "each_secret_multiplier",
+    "production_multiplier",
+    "fixed_essence",
+}
 
 
 async def game_enabled(pool, guild_id: int) -> bool:
-    enabled = await pool.fetchval("SELECT game_enabled FROM guild_settings WHERE guild_id=$1", guild_id)
+    """Return whether this guild currently permits game commands and rewards."""
+    enabled = await pool.fetchval(
+        "SELECT game_enabled FROM guild_settings WHERE guild_id=$1", guild_id
+    )
     return bool(enabled)
 
 
@@ -18,15 +26,23 @@ def reward_policy_label(policy: dict, locale: str = "ko") -> str:
     kind = policy.get("type", "none")
     names = {
         "ko": {
-            "none": "보상 없음", "essence_multiplier": "정수 배율", "each_secret_multiplier": "모든 비밀 배율",
-            "production_multiplier": "생산 배율", "fixed_essence": "고정 정수",
-            "legacy_kyohoon": "정수: 0이면 1, 그 외 ×2", "legacy_tomak": "모든 비밀 ×2",
+            "none": "보상 없음",
+            "essence_multiplier": "정수 배율",
+            "each_secret_multiplier": "모든 비밀 배율",
+            "production_multiplier": "생산 배율",
+            "fixed_essence": "고정 정수",
+            "legacy_kyohoon": "정수: 0이면 1, 그 외 ×2",
+            "legacy_tomak": "모든 비밀 ×2",
             "legacy_secret_multiplier": "모든 비밀 ×1.05",
         },
         "en": {
-            "none": "No reward", "essence_multiplier": "Essence multiplier", "each_secret_multiplier": "Each-secret multiplier",
-            "production_multiplier": "Production multiplier", "fixed_essence": "Fixed essence",
-            "legacy_kyohoon": "Essence: 1 from zero, otherwise ×2", "legacy_tomak": "Each secret ×2",
+            "none": "No reward",
+            "essence_multiplier": "Essence multiplier",
+            "each_secret_multiplier": "Each-secret multiplier",
+            "production_multiplier": "Production multiplier",
+            "fixed_essence": "Fixed essence",
+            "legacy_kyohoon": "Essence: 1 from zero, otherwise ×2",
+            "legacy_tomak": "Each secret ×2",
             "legacy_secret_multiplier": "Each secret ×1.05",
         },
     }["ko" if locale == "ko" else "en"]
@@ -36,13 +52,27 @@ def reward_policy_label(policy: dict, locale: str = "ko") -> str:
         return names[kind]
     text = f"{names.get(kind, kind)} {policy.get('amount', '')}".strip()
     if policy.get("first_grant_amount"):
-        text += f" (첫 정수: {policy['first_grant_amount']})" if locale == "ko" else f" (first essence: {policy['first_grant_amount']})"
+        text += (
+            f" (첫 정수: {policy['first_grant_amount']})"
+            if locale == "ko"
+            else f" (first essence: {policy['first_grant_amount']})"
+        )
     if policy.get("weekly_cap"):
-        text += f" (주 {policy['weekly_cap']}회 한도)" if locale == "ko" else f" (weekly cap: {policy['weekly_cap']})"
+        text += (
+            f" (주 {policy['weekly_cap']}회 한도)"
+            if locale == "ko"
+            else f" (weekly cap: {policy['weekly_cap']})"
+        )
     return text
 
 
-def reward_policy(policy_type: str, amount: str | None = None, first_grant_amount: str | None = None, weekly_cap: int | None = None) -> dict:
+def reward_policy(
+    policy_type: str,
+    amount: str | None = None,
+    first_grant_amount: str | None = None,
+    weekly_cap: int | None = None,
+) -> dict:
+    """Validate slash-command reward input and return its storable policy object."""
     if policy_type not in REWARD_TYPES:
         raise ValueError("admin.reward_policy.invalid_type")
     if policy_type == "none":
@@ -53,6 +83,7 @@ def reward_policy(policy_type: str, amount: str | None = None, first_grant_amoun
         numeric = Decimal(amount)
     except InvalidOperation as exc:
         raise ValueError("admin.reward_policy.amount_invalid") from exc
+    # Production can safely use a wider multiplier range than player resources.
     upper = Decimal("3") if policy_type == "production_multiplier" else Decimal("2")
     lower = Decimal("1") if policy_type == "production_multiplier" else Decimal("1.1")
     if policy_type == "fixed_essence":
@@ -60,6 +91,7 @@ def reward_policy(policy_type: str, amount: str | None = None, first_grant_amoun
             raise ValueError("admin.reward_policy.fixed_positive")
     elif not lower <= numeric <= upper:
         raise ValueError("admin.reward_policy.range")
+    # Store Decimal values as strings so JSONB persistence never loses precision.
     result = {"type": policy_type, "amount": str(numeric)}
     if first_grant_amount is not None:
         try:

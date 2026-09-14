@@ -1,4 +1,9 @@
-"""시크리타이 인크리멘탈의 트랜잭션 도메인 작업을 제공합니다."""
+"""Transactional domain operations for the guild-scoped incremental game.
+
+This module remains cohesive despite its size: every public operation owns one
+atomic game-state transition.  Pure arithmetic is shared with simulations, and
+the transaction functions centralize locking and durable persistence here.
+"""
 
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
@@ -12,60 +17,64 @@ MILKY_WAY_LOG_BONUS = N.of("0.035")
 
 
 def _amounts(keys, initial):
-    """하나의 초기값으로 완전한 자원 모음을 생성합니다."""
+    """Create a complete resource collection with one initial value."""
     return {key: N.of(initial) for key in keys}
 
 
 def _encode(values):
-    """자원 모음을 JSONB 저장 형식으로 인코딩합니다."""
+    """Encode a resource collection for JSONB storage."""
     return {key: value.to_json() for key, value in values.items()}
 
 
 def _decode(raw, keys):
-    """정확한 자원 키 집합을 검증하고 수량을 디코딩합니다."""
+    """Validate the exact resource keys and decode their quantities."""
     if not isinstance(raw, dict) or set(raw) != set(keys):
-        raise ValueError("손상된 게임 데이터입니다.")
+        raise ValueError("Game data is corrupted.")
 
     return {key: N.from_json(raw[key]) for key in keys}
 
 
 def game_date(now=None):
-    """하루 경계가 KST 오전 5시인 게임 날짜를 반환합니다."""
+    """Return the game date, whose daily boundary is 05:00 KST."""
     now = now or datetime.now(timezone.utc)
     kst = now.astimezone(timezone(timedelta(hours=9)))
     return (kst - timedelta(days=1) if kst.hour < 5 else kst).date()
 
 
 def concentration_week_start(now=None):
-    """주간 농축 기간의 월요일 게임 날짜를 반환합니다."""
+    """Return the Monday game date for the current concentration period."""
     current = game_date(now)
     return current - timedelta(days=current.weekday())
 
 
 def concentration_available(state, now=None):
-    """플레이어가 이번 KST 게임 주에 아직 농축하지 않았는지 확인합니다."""
+    """Return whether the player has not concentrated this KST game week."""
     return state["player"]["last_concentrated_week_start"] != concentration_week_start(
         now
     )
 
 
 def milky_way_multiplier(total_essence):
-    """감소 효율이 적용된 전역 생산 계수를 반환합니다.
+    """Return the global production factor with diminishing returns.
 
-    기존의 선형 ``total_essence + 1`` 배율은 큰 서버에서 신규 플레이어가
-    한 번의 생산으로 첫 농축을 끝낼 수 있게 했습니다. 로그 계수는 색 비밀
-    연쇄로 기하급수적 성장이 일어나지 않도록 하면서 공유 세계의 보상을 유지합니다.
+    A linear ``total_essence + 1`` multiplier let a large guild carry a new
+    player through their first concentration in one production.  A logarithmic
+    factor preserves shared-world rewards without an exponential colour cascade.
     """
     size = total_essence + ONE
     return MILKY_WAY_BASE + size.ln() * MILKY_WAY_LOG_BONUS
 
 
 async def ensure_player(conn, guild_id, discord_id):
-    """플레이어가 없으면 기본 자원과 함께 생성합니다."""
+    """Create the guild world and player with default resources if absent."""
+    # World state must exist before this player can participate in shared progress.
     await conn.execute(
         "INSERT INTO guild_game_world_state(guild_id,total_essence,highest_essence) VALUES($1,$2,$2) ON CONFLICT(guild_id) DO NOTHING",
-        guild_id, ZERO.to_json(),
+        guild_id,
+        ZERO.to_json(),
     )
+    # Player scalar state, secrets, and organics are independently idempotent
+    # so a partially initialized account repairs safely on its next command.
     await conn.execute(
         "INSERT INTO guild_game_players(guild_id,discord_id,shards,essence) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING",
         guild_id,
@@ -92,20 +101,27 @@ async def _state(conn, guild_id, discord_id, world_lock="FOR SHARE"):
     # Create the guild world before taking its lock; the insert is idempotent.
     await conn.execute(
         "INSERT INTO guild_game_world_state(guild_id,total_essence,highest_essence) VALUES($1,$2,$2) ON CONFLICT(guild_id) DO NOTHING",
-        guild_id, ZERO.to_json(),
+        guild_id,
+        ZERO.to_json(),
     )
     world = await conn.fetchrow(
         f"SELECT * FROM guild_game_world_state WHERE guild_id=$1 {world_lock}", guild_id
     )
     await ensure_player(conn, guild_id, discord_id)
     player = await conn.fetchrow(
-        "SELECT * FROM guild_game_players WHERE guild_id=$1 AND discord_id=$2 FOR UPDATE", guild_id, discord_id
+        "SELECT * FROM guild_game_players WHERE guild_id=$1 AND discord_id=$2 FOR UPDATE",
+        guild_id,
+        discord_id,
     )
     secrets = await conn.fetchrow(
-        "SELECT amounts FROM guild_game_secrets WHERE guild_id=$1 AND discord_id=$2 FOR UPDATE", guild_id, discord_id
+        "SELECT amounts FROM guild_game_secrets WHERE guild_id=$1 AND discord_id=$2 FOR UPDATE",
+        guild_id,
+        discord_id,
     )
     organics = await conn.fetchrow(
-        "SELECT amounts FROM guild_game_organics WHERE guild_id=$1 AND discord_id=$2 FOR UPDATE", guild_id, discord_id
+        "SELECT amounts FROM guild_game_organics WHERE guild_id=$1 AND discord_id=$2 FOR UPDATE",
+        guild_id,
+        discord_id,
     )
     return {
         "player": player,
@@ -293,11 +309,15 @@ def community_reward_step(state, policy):
         state["highest"] = maximum(state["highest"], after)
         return {"after_essence": after.to_json()}
     if policy_type == "each_secret_multiplier":
-        after = {key: (value * amount).floor() for key, value in state["secrets"].items()}
+        after = {
+            key: (value * amount).floor() for key, value in state["secrets"].items()
+        }
         state["secrets"] = after
         return {"after_secrets": _encode(after)}
     if policy_type == "production_multiplier":
-        after = {key: (value * amount).floor() for key, value in state["organics"].items()}
+        after = {
+            key: (value * amount).floor() for key, value in state["organics"].items()
+        }
         state["organics"] = after
         return {"after_organics": _encode(after)}
     raise ValueError("지원하지 않는 보상 정책입니다.")
@@ -456,7 +476,7 @@ async def grant_kyohoon_reward(
     플레이어에게는 정수 1개를 지급합니다.
 
     멱등성 기록과 모든 자원 변경은 함께 커밋됩니다. 호출자는 신청의
-    ``posted_at`` 갱신이 성공한 뒤에만 이 함수를 호출해야 합니다. 
+    ``posted_at`` 갱신이 성공한 뒤에만 이 함수를 호출해야 합니다.
     """
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -529,9 +549,7 @@ async def grant_tomak_reward(
 
             state = await _state(conn, guild_id, discord_id)
             before = dict(state["secrets"])
-            after = {
-                key: (value * N.of("2")).floor() for key, value in before.items()
-            }
+            after = {key: (value * N.of("2")).floor() for key, value in before.items()}
             increases = {key: after[key] - before[key] for key in SECRETS}
             details = {
                 "multiplier": "2",
@@ -632,22 +650,30 @@ async def grant_configured_reward(
             # check, so concurrent publications cannot over-grant.
             await conn.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2, 0))",
-                str(guild_id), str(source_id),
+                str(guild_id),
+                str(source_id),
             )
             existing = await conn.fetchrow(
                 "SELECT state FROM game_reward_ledger WHERE guild_id=$1 AND source_type=$2 "
                 "AND contribution_message_id=$3 FOR UPDATE",
-                guild_id, source_type, message_id,
+                guild_id,
+                source_type,
+                message_id,
             )
             if existing is not None:
-                return {"awarded": False, "already_awarded": existing["state"] == "granted"}
+                return {
+                    "awarded": False,
+                    "already_awarded": existing["state"] == "granted",
+                }
             weekly_cap = policy.get("weekly_cap")
             if weekly_cap is not None:
                 grants = await conn.fetchval(
                     "SELECT COUNT(*) FROM game_reward_ledger WHERE guild_id=$1 AND source_type=$2 "
                     "AND source_id=$3 AND state='granted' AND created_at >= "
                     "(date_trunc('week', NOW() AT TIME ZONE 'Asia/Seoul') AT TIME ZONE 'Asia/Seoul')",
-                    guild_id, source_type, source_id,
+                    guild_id,
+                    source_type,
+                    source_id,
                 )
                 if grants >= weekly_cap:
                     return {"awarded": False, "cap_reached": True}
@@ -656,33 +682,80 @@ async def grant_configured_reward(
                    VALUES($1,$2,$3,$4,$5,$6)
                    ON CONFLICT(guild_id,source_type,contribution_message_id) DO NOTHING
                    RETURNING id""",
-                guild_id, source_type, source_id, message_id, discord_id, policy,
+                guild_id,
+                source_type,
+                source_id,
+                message_id,
+                discord_id,
+                policy,
             )
             if ledger is None:
                 return {"awarded": False, "already_awarded": True}
             state = await _state(conn, guild_id, discord_id, "FOR UPDATE")
             snapshot = {
-                "player": {"shards": state["shards"].to_json(), "essence": state["essence"].to_json(),
-                           "last_produced_game_date": state["player"]["last_produced_game_date"].isoformat() if state["player"]["last_produced_game_date"] else None,
-                           "last_concentrated_week_start": state["player"]["last_concentrated_week_start"].isoformat() if state["player"]["last_concentrated_week_start"] else None},
-                "secrets": _encode(state["secrets"]), "organics": _encode(state["organics"]),
-                "world": {"total": state["total"].to_json(), "highest": state["highest"].to_json()},
+                "player": {
+                    "shards": state["shards"].to_json(),
+                    "essence": state["essence"].to_json(),
+                    "last_produced_game_date": (
+                        state["player"]["last_produced_game_date"].isoformat()
+                        if state["player"]["last_produced_game_date"]
+                        else None
+                    ),
+                    "last_concentrated_week_start": (
+                        state["player"]["last_concentrated_week_start"].isoformat()
+                        if state["player"]["last_concentrated_week_start"]
+                        else None
+                    ),
+                },
+                "secrets": _encode(state["secrets"]),
+                "organics": _encode(state["organics"]),
+                "world": {
+                    "total": state["total"].to_json(),
+                    "highest": state["highest"].to_json(),
+                },
             }
             await conn.execute(
                 "INSERT INTO game_state_snapshots(guild_id,player_id,reward_ledger_id,state_payload,expires_at) VALUES($1,$2,$3,$4,NOW() + INTERVAL '30 days')",
-                guild_id, discord_id, ledger["id"], snapshot,
+                guild_id,
+                discord_id,
+                ledger["id"],
+                snapshot,
             )
             details = {"before": snapshot, "policy": policy}
             result = community_reward_step(state, policy)
             details.update(result)
             if policy_type in {"essence_multiplier", "fixed_essence"}:
-                await conn.execute("UPDATE guild_game_players SET essence=$3,updated_at=NOW() WHERE guild_id=$1 AND discord_id=$2", guild_id, discord_id, state["essence"].to_json())
-                await conn.execute("UPDATE guild_game_world_state SET total_essence=$2,highest_essence=$3,updated_at=NOW() WHERE guild_id=$1", guild_id, state["total"].to_json(), state["highest"].to_json())
+                await conn.execute(
+                    "UPDATE guild_game_players SET essence=$3,updated_at=NOW() WHERE guild_id=$1 AND discord_id=$2",
+                    guild_id,
+                    discord_id,
+                    state["essence"].to_json(),
+                )
+                await conn.execute(
+                    "UPDATE guild_game_world_state SET total_essence=$2,highest_essence=$3,updated_at=NOW() WHERE guild_id=$1",
+                    guild_id,
+                    state["total"].to_json(),
+                    state["highest"].to_json(),
+                )
             elif policy_type == "each_secret_multiplier":
-                await conn.execute("UPDATE guild_game_secrets SET amounts=$3 WHERE guild_id=$1 AND discord_id=$2", guild_id, discord_id, _encode(state["secrets"]))
+                await conn.execute(
+                    "UPDATE guild_game_secrets SET amounts=$3 WHERE guild_id=$1 AND discord_id=$2",
+                    guild_id,
+                    discord_id,
+                    _encode(state["secrets"]),
+                )
             else:
-                await conn.execute("UPDATE guild_game_organics SET amounts=$3 WHERE guild_id=$1 AND discord_id=$2", guild_id, discord_id, _encode(state["organics"]))
-            await conn.execute("UPDATE game_reward_ledger SET state='granted',details=$2,resolved_at=NOW() WHERE id=$1", ledger["id"], details)
+                await conn.execute(
+                    "UPDATE guild_game_organics SET amounts=$3 WHERE guild_id=$1 AND discord_id=$2",
+                    guild_id,
+                    discord_id,
+                    _encode(state["organics"]),
+                )
+            await conn.execute(
+                "UPDATE game_reward_ledger SET state='granted',details=$2,resolved_at=NOW() WHERE id=$1",
+                ledger["id"],
+                details,
+            )
             return {"awarded": True, "ledger_id": ledger["id"], **details}
 
 
@@ -694,20 +767,46 @@ async def rollback_configured_reward(pool, guild_id, ledger_id):
                 """SELECT ledger.*, snapshot.state_payload, snapshot.expires_at, snapshot.pruned_at
                    FROM game_reward_ledger ledger JOIN game_state_snapshots snapshot ON snapshot.reward_ledger_id=ledger.id
                    WHERE ledger.id=$1 AND ledger.guild_id=$2 FOR UPDATE""",
-                ledger_id, guild_id,
+                ledger_id,
+                guild_id,
             )
             if row is None or row["state"] != "granted":
                 raise ValueError("되돌릴 수 있는 지급 기록을 찾지 못했습니다.")
             if row["pruned_at"] or row["expires_at"] <= datetime.now(timezone.utc):
-                raise ValueError("보상 스냅샷 보존 기간이 지나 전체 되돌리기를 할 수 없습니다.")
+                raise ValueError(
+                    "보상 스냅샷 보존 기간이 지나 전체 되돌리기를 할 수 없습니다."
+                )
             if row["policy"].get("type") in {"essence_multiplier", "fixed_essence"}:
-                raise ValueError("공유 세계 정수를 변경한 보상은 안전하게 전체 되돌리기를 할 수 없습니다.")
+                raise ValueError(
+                    "공유 세계 정수를 변경한 보상은 안전하게 전체 되돌리기를 할 수 없습니다."
+                )
             snapshot = row["state_payload"]
             player = snapshot["player"]
-            await conn.execute("UPDATE guild_game_players SET shards=$3,essence=$4,last_produced_game_date=$5,last_concentrated_week_start=$6,updated_at=NOW() WHERE guild_id=$1 AND discord_id=$2", guild_id, row["recipient_id"], player["shards"], player["essence"], player["last_produced_game_date"], player["last_concentrated_week_start"])
-            await conn.execute("UPDATE guild_game_secrets SET amounts=$3 WHERE guild_id=$1 AND discord_id=$2", guild_id, row["recipient_id"], snapshot["secrets"])
-            await conn.execute("UPDATE guild_game_organics SET amounts=$3 WHERE guild_id=$1 AND discord_id=$2", guild_id, row["recipient_id"], snapshot["organics"])
-            await conn.execute("UPDATE game_reward_ledger SET state='revoked',resolved_at=NOW() WHERE id=$1", ledger_id)
+            await conn.execute(
+                "UPDATE guild_game_players SET shards=$3,essence=$4,last_produced_game_date=$5,last_concentrated_week_start=$6,updated_at=NOW() WHERE guild_id=$1 AND discord_id=$2",
+                guild_id,
+                row["recipient_id"],
+                player["shards"],
+                player["essence"],
+                player["last_produced_game_date"],
+                player["last_concentrated_week_start"],
+            )
+            await conn.execute(
+                "UPDATE guild_game_secrets SET amounts=$3 WHERE guild_id=$1 AND discord_id=$2",
+                guild_id,
+                row["recipient_id"],
+                snapshot["secrets"],
+            )
+            await conn.execute(
+                "UPDATE guild_game_organics SET amounts=$3 WHERE guild_id=$1 AND discord_id=$2",
+                guild_id,
+                row["recipient_id"],
+                snapshot["organics"],
+            )
+            await conn.execute(
+                "UPDATE game_reward_ledger SET state='revoked',resolved_at=NOW() WHERE id=$1",
+                ledger_id,
+            )
             return {"recipient_id": row["recipient_id"], "policy": row["policy"]}
 
 
@@ -719,7 +818,9 @@ async def prune_expired_reward_snapshots(pool):
     )
 
 
-async def register_reward_reconciliation(pool, guild_id, source_type, message_id, reason):
+async def register_reward_reconciliation(
+    pool, guild_id, source_type, message_id, reason
+):
     """Durably queue a human-reviewed reward reversal case.
 
     Deleting a Discord contribution must never falsely claim that a reward was
@@ -731,7 +832,9 @@ async def register_reward_reconciliation(pool, guild_id, source_type, message_id
     ledger = await pool.fetchrow(
         "SELECT id FROM game_reward_ledger WHERE guild_id=$1 AND source_type=$2 "
         "AND contribution_message_id=$3 AND state='granted'",
-        guild_id, source_type, message_id,
+        guild_id,
+        source_type,
+        message_id,
     )
     if ledger is not None:
         reward_kind = "configured"
@@ -739,7 +842,8 @@ async def register_reward_reconciliation(pool, guild_id, source_type, message_id
         legacy_rewarded = await pool.fetchval(
             "SELECT 1 FROM guild_game_relay_rewards WHERE guild_id=$1 AND message_id=$2 "
             "UNION ALL SELECT 1 FROM si_relay_rewards WHERE message_id=$2 LIMIT 1",
-            guild_id, message_id,
+            guild_id,
+            message_id,
         )
         reward_kind = "legacy" if legacy_rewarded else None
     else:
@@ -756,8 +860,12 @@ async def register_reward_reconciliation(pool, guild_id, source_type, message_id
                reward_ledger_id,reward_kind,reason)
            VALUES($1,$2,$3,$4,$5,$6)
            ON CONFLICT(guild_id,source_type,contribution_message_id) DO NOTHING""",
-        guild_id, source_type, message_id, ledger["id"] if ledger else None,
-        reward_kind, reason,
+        guild_id,
+        source_type,
+        message_id,
+        ledger["id"] if ledger else None,
+        reward_kind,
+        reason,
     )
     return {"ledger_id": ledger["id"] if ledger else None, "reward_kind": reward_kind}
 

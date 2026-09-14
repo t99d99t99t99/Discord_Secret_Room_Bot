@@ -10,4 +10,3 @@ async def initialize_base_schema(conn) -> None:
     """Create stable tables before their versioned data migrations run."""
     await initialize_community_schema(conn)
     await initialize_legacy_schema(conn)
-

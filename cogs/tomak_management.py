@@ -1,3 +1,3 @@
-"""토막상식 코그 확장을 위한 호환 진입점입니다."""
+"""The entrance of Tomak cog."""
 
 from .submission_management.tomak import setup

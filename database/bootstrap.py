@@ -22,21 +22,20 @@ async def initialize_database(conn) -> None:
 async def run_legacy_schema_migrations(conn) -> None:
     """Apply the small, versioned repairs for the pre-custom-setup tables."""
     applied = {
-        row["version"]
-        for row in await conn.fetch("SELECT version FROM sc_migrations")
+        row["version"] for row in await conn.fetch("SELECT version FROM sc_migrations")
     }
 
     if 1 not in applied:
         rows = await conn.fetch("SELECT id, width, height, arr FROM sc_factories")
         for row in rows:
             arr, width, height = row["arr"], row["width"], row["height"]
-            if width == height or len(arr) != width or any(
-                len(column) != height for column in arr
+            if (
+                width == height
+                or len(arr) != width
+                or any(len(column) != height for column in arr)
             ):
                 continue
-            transposed = [
-                [arr[x][y] for x in range(width)] for y in range(height)
-            ]
+            transposed = [[arr[x][y] for x in range(width)] for y in range(height)]
             await conn.execute(
                 "UPDATE sc_factories SET arr = $1 WHERE id = $2",
                 transposed,

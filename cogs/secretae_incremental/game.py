@@ -1,4 +1,4 @@
-"""Discord 표시 계층입니다. 모든 상태 변경은 ``.db``에서 처리합니다."""
+"""Discord presentation layer; transactional state changes live in ``.db``."""
 
 from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
@@ -31,24 +31,33 @@ from ..localization import interaction_locale, text
 
 
 def _status_view(state, locale="ko"):
-    """구역 사이에 Discord 구분선을 둔 현황 Components v2 레이아웃입니다."""
+    """Render the grouped resource-status view used by the game command."""
     sections = [
         "\n".join(
             (
-                text("game.status.shards", locale, amount=format_amount(state["shards"])),
-                text("game.status.essence", locale, amount=format_amount(state["essence"])),
+                text(
+                    "game.status.shards", locale, amount=format_amount(state["shards"])
+                ),
+                text(
+                    "game.status.essence",
+                    locale,
+                    amount=format_amount(state["essence"]),
+                ),
             )
         ),
-        text("game.status.organics", locale) + "\n"
+        text("game.status.organics", locale)
+        + "\n"
         + " · ".join(
             f"{ORGANIC_SYMBOLS[k]} {format_amount(state['organics'][k])}"
             for k in COLORS
         ),
-        text("game.status.colour_secrets", locale) + "\n"
+        text("game.status.colour_secrets", locale)
+        + "\n"
         + " · ".join(
             f"{SYMBOLS[k]} {format_amount(state['secrets'][k])}" for k in COLORS
         ),
-        text("game.status.shape_secrets", locale) + "\n"
+        text("game.status.shape_secrets", locale)
+        + "\n"
         + " · ".join(
             f"{SYMBOLS[k]} {format_amount(state['secrets'][k])}" for k in SHAPES
         ),
@@ -62,7 +71,7 @@ def _status_view(state, locale="ko"):
 
 
 def _amount_table(rows, change_label, locale="ko"):
-    """결과·기존·변화량 열을 이모지와 숫자 폭에 맞춰 정렬합니다."""
+    """Align result, previous-value, and change columns for Discord output."""
     formatted_rows = [
         (symbol, *(format_amount(value) for value in values))
         for symbol, *values in rows
@@ -85,7 +94,7 @@ def _amount_table(rows, change_label, locale="ko"):
 
 
 def _production_text(state, production, locale="ko"):
-    """생산 전후 및 획득량을 숫자 열이 맞춰진 결과표로 렌더링합니다."""
+    """Render production before/after values and gains as an aligned table."""
     rows = [(SHARD_SYMBOL, state["shards"], *production["shards"])]
     rows.extend(
         (
@@ -104,14 +113,20 @@ def _production_text(state, production, locale="ko"):
 
 
 def _concentration_text(before, gain, after, title, locale="ko"):
-    """농축 전후의 이야기 정수를 간결한 변화 행으로 렌더링합니다."""
+    """Render one compact essence transition row for concentration output."""
     values = [format_amount(value) for value in (after, before, gain)]
     width = max(len(value) for value in values)
     return "\n".join(
         (
             text("game.concentration.title", locale, title=title),
             "```",
-            text("game.concentration.line", locale, after=values[0].rjust(width), before=values[1].rjust(width), gain=values[2].rjust(width)),
+            text(
+                "game.concentration.line",
+                locale,
+                after=values[0].rjust(width),
+                before=values[1].rjust(width),
+                gain=values[2].rjust(width),
+            ),
             "```",
         )
     )
@@ -161,20 +176,50 @@ def _price_text(state, locale="ko"):
     lines = [
         text("game.price.title", locale),
         text("game.price.shards", locale, amount=format_amount(state["shards"])),
-        text("game.price.discount", locale, discount=f"{discount * 100:.0f}", multiplier=f"{square_multiplier.mag:.3f}"),
+        text(
+            "game.price.discount",
+            locale,
+            discount=f"{discount * 100:.0f}",
+            multiplier=f"{square_multiplier.mag:.3f}",
+        ),
         "\n" + text("game.price.next", locale),
     ]
     for key in SECRETS:
         cost = quote_synthesis(state, key, N.of(1))
-        mark = text("game.price.available" if state["shards"].is_affordable(cost) else "game.price.unavailable", locale)
+        mark = text(
+            (
+                "game.price.available"
+                if state["shards"].is_affordable(cost)
+                else "game.price.unavailable"
+            ),
+            locale,
+        )
         lines.append(
-            text("game.price.secret", locale, symbol=SYMBOLS[key], owned=format_amount(state["secrets"][key]), cost=format_amount(cost), availability=mark)
+            text(
+                "game.price.secret",
+                locale,
+                symbol=SYMBOLS[key],
+                owned=format_amount(state["secrets"][key]),
+                cost=format_amount(cost),
+                availability=mark,
+            )
         )
     lines.extend(
         [
             "\n" + text("game.price.concentration", locale),
-            text("game.price.essence", locale, base=format_amount(base_gain), multiplier=format_amount(heart_multiplier)),
-            text("game.price.gain", locale, gain=format_amount(gain), current=format_amount(state["essence"]), after=format_amount(state["essence"] + gain)),
+            text(
+                "game.price.essence",
+                locale,
+                base=format_amount(base_gain),
+                multiplier=format_amount(heart_multiplier),
+            ),
+            text(
+                "game.price.gain",
+                locale,
+                gain=format_amount(gain),
+                current=format_amount(state["essence"]),
+                after=format_amount(state["essence"] + gain),
+            ),
             text("game.price.reset", locale),
         ]
     )
@@ -205,23 +250,23 @@ def _game_help_text(template, game_name):
 
 
 class SecretaeIncremental(commands.Cog):
-    """시크리타이 인크리멘탈 Discord 명령 그룹입니다."""
+    """Discord command group for the guild-scoped incremental game."""
 
     game = app_commands.Group(name="게임", description="이 서버의 증분 게임")
 
     def __init__(self, bot):
-        """도메인 계층에서 사용하는 봇 참조를 보관합니다."""
+        """Store the bot reference used by command and alert handlers."""
         self.bot = bot
         self._commands_synced = False
         self.send_game_alerts.start()
 
     def cog_unload(self):
-        """코그가 내려갈 때 시간별 알림 스케줄러를 중지합니다."""
+        """Stop the hourly alert scheduler when Discord unloads this cog."""
         self.send_game_alerts.cancel()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        """현재 명령 트리를 서버에 동기화해 기존 게임 명령을 교체합니다."""
+        """Synchronize the current command tree after the bot becomes ready."""
         if self._commands_synced:
             return
 
@@ -239,12 +284,17 @@ class SecretaeIncremental(commands.Cog):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """모든 /게임 호출을 일일 게임 활동으로 처리합니다."""
-        if interaction.guild is None or not await game_enabled(self.bot.db, interaction.guild.id):
+        if interaction.guild is None or not await game_enabled(
+            self.bot.db, interaction.guild.id
+        ):
             await interaction.response.send_message(
-                text("game.disabled", await interaction_locale(interaction)), ephemeral=True
+                text("game.disabled", await interaction_locale(interaction)),
+                ephemeral=True,
             )
             return False
-        await record_game_command(self.bot.db, interaction.guild.id, interaction.user.id)
+        await record_game_command(
+            self.bot.db, interaction.guild.id, interaction.user.id
+        )
         return True
 
     @tasks.loop(
@@ -258,10 +308,16 @@ class SecretaeIncremental(commands.Cog):
         is_concentration_deadline = (kst_now.weekday() == 6 and kst_now.hour >= 5) or (
             kst_now.weekday() == 0 and kst_now.hour < 5
         )
-        guild_ids = await self.bot.db.fetch("SELECT guild_id,game_name,locale FROM guild_settings WHERE game_enabled=TRUE")
+        guild_ids = await self.bot.db.fetch(
+            "SELECT guild_id,game_name,locale FROM guild_settings WHERE game_enabled=TRUE"
+        )
         for guild in guild_ids:
             for row in await due_alert_players(
-                self.bot.db, guild["guild_id"], kst_now.hour, is_concentration_deadline, now
+                self.bot.db,
+                guild["guild_id"],
+                kst_now.hour,
+                is_concentration_deadline,
+                now,
             ):
                 try:
                     user = self.bot.get_user(
@@ -269,10 +325,24 @@ class SecretaeIncremental(commands.Cog):
                     ) or await self.bot.fetch_user(row["discord_id"])
                     messages = []
                     if row["needs_game"]:
-                        messages.append(text("game.alert.daily", guild["locale"], game_name=guild["game_name"]))
+                        messages.append(
+                            text(
+                                "game.alert.daily",
+                                guild["locale"],
+                                game_name=guild["game_name"],
+                            )
+                        )
                     if row["needs_concentration"]:
-                        messages.append(text("game.alert.concentration", guild["locale"]))
-                    await user.send(text("game.alert.prefix", guild["locale"], messages="\n".join(messages)))
+                        messages.append(
+                            text("game.alert.concentration", guild["locale"])
+                        )
+                    await user.send(
+                        text(
+                            "game.alert.prefix",
+                            guild["locale"],
+                            messages="\n".join(messages),
+                        )
+                    )
                 except discord.HTTPException:
                     # 사용자가 DM을 차단할 수 있으므로 나중에 허용할 수 있게 설정은 보존합니다.
                     pass
@@ -292,15 +362,22 @@ class SecretaeIncremental(commands.Cog):
     async def help(self, interaction: discord.Interaction):
         """저장된 게임 안내를 호출자에게만 보여 줍니다."""
         settings = await self.bot.db.fetchrow(
-            "SELECT game_name,locale FROM guild_settings WHERE guild_id=$1", interaction.guild.id
+            "SELECT game_name,locale FROM guild_settings WHERE guild_id=$1",
+            interaction.guild.id,
         )
         locale = await interaction_locale(interaction)
         await interaction.response.send_message(
-            text("game.help", locale, game_name=settings["game_name"] if settings else "Essence Foundry"),
+            text(
+                "game.help",
+                locale,
+                game_name=settings["game_name"] if settings else "Essence Foundry",
+            ),
             ephemeral=True,
         )
 
-    @game.command(name="보상", description="이 서버의 공지·릴레이 게임 보상을 확인합니다.")
+    @game.command(
+        name="보상", description="이 서버의 공지·릴레이 게임 보상을 확인합니다."
+    )
     async def rewards(self, interaction: discord.Interaction):
         """Show configured community rewards only when a member explicitly asks."""
         assert interaction.guild is not None
@@ -313,12 +390,24 @@ class SecretaeIncremental(commands.Cog):
             interaction.guild.id,
         )
         if not rows:
-            await interaction.response.send_message(text("game.rewards.none", await interaction_locale(interaction)), ephemeral=True)
+            await interaction.response.send_message(
+                text("game.rewards.none", await interaction_locale(interaction)),
+                ephemeral=True,
+            )
             return
         locale = await interaction_locale(interaction)
         lines = [text("game.rewards.title", locale)]
         lines.extend(
-            text("game.rewards.line", locale, feature=text(f"game.feature.{'queue' if row['feature'] == 'notice_queue' else 'relay'}", locale), name=row['display_name'], policy=reward_policy_label(row['reward_policy'], locale))
+            text(
+                "game.rewards.line",
+                locale,
+                feature=text(
+                    f"game.feature.{'queue' if row['feature'] == 'notice_queue' else 'relay'}",
+                    locale,
+                ),
+                name=row["display_name"],
+                policy=reward_policy_label(row["reward_policy"], locale),
+            )
             for row in rows
         )
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
@@ -329,18 +418,27 @@ class SecretaeIncremental(commands.Cog):
         await interaction.response.send_message(
             text("game.alert.prompt", await interaction_locale(interaction)),
             ephemeral=True,
-            view=AlertTypeView(self, interaction.guild.id, interaction.user.id, await interaction_locale(interaction)),
+            view=AlertTypeView(
+                self,
+                interaction.guild.id,
+                interaction.user.id,
+                await interaction_locale(interaction),
+            ),
         )
 
     @game.command(name="현황", description="현재 게임 현황을 봅니다.")
     async def status(self, interaction: discord.Interaction):
         """호출자의 현재 게임 자원을 보여 줍니다."""
         state = await get_status(self.bot.db, interaction.guild.id, interaction.user.id)
-        await interaction.response.send_message(view=_status_view(state, await interaction_locale(interaction)))
+        await interaction.response.send_message(
+            view=_status_view(state, await interaction_locale(interaction))
+        )
         legacy_guild = os.getenv("SECRET_ROOM_SERVER_ID")
         report = (
             await get_unacknowledged_migration_report(self.bot.db, interaction.user.id)
-            if legacy_guild and legacy_guild.isdecimal() and interaction.guild.id == int(legacy_guild)
+            if legacy_guild
+            and legacy_guild.isdecimal()
+            and interaction.guild.id == int(legacy_guild)
             else None
         )
         if report:
@@ -353,8 +451,12 @@ class SecretaeIncremental(commands.Cog):
     async def production(self, interaction: discord.Interaction):
         """하루 생산을 한 번 실행합니다."""
         try:
-            state, summary = await produce(self.bot.db, interaction.guild.id, interaction.user.id)
-            await interaction.response.send_message(_production_text(state, summary, await interaction_locale(interaction)))
+            state, summary = await produce(
+                self.bot.db, interaction.guild.id, interaction.user.id
+            )
+            await interaction.response.send_message(
+                _production_text(state, summary, await interaction_locale(interaction))
+            )
         except ValueError as error:
             await self._error(interaction, error)
 
@@ -370,7 +472,13 @@ class SecretaeIncremental(commands.Cog):
                 self.bot.db, interaction.guild.id, interaction.user.id, key, amount
             )
             await interaction.response.send_message(
-                text("game.synthesis.complete", await interaction_locale(interaction), symbol=SYMBOLS[key], amount=format_amount(N.of(amount)), cost=format_amount(cost))
+                text(
+                    "game.synthesis.complete",
+                    await interaction_locale(interaction),
+                    symbol=SYMBOLS[key],
+                    amount=format_amount(N.of(amount)),
+                    cost=format_amount(cost),
+                )
             )
         except ValueError as error:
             await self._error(interaction, error)
@@ -385,7 +493,10 @@ class SecretaeIncremental(commands.Cog):
             await interaction.response.send_message(rendered, ephemeral=True)
         else:
             await interaction.response.send_message(
-                embed=discord.Embed(title=text("game.price.title", locale).strip("*"), description=rendered[:4_000]),
+                embed=discord.Embed(
+                    title=text("game.price.title", locale).strip("*"),
+                    description=rendered[:4_000],
+                ),
                 ephemeral=True,
             )
 
@@ -395,7 +506,9 @@ class SecretaeIncremental(commands.Cog):
     async def maximum_synthesis(self, interaction: discord.Interaction):
         """비밀 우선순위에 따라 파편을 가능한 만큼 사용합니다."""
         try:
-            state, summary = await max_synthesize(self.bot.db, interaction.guild.id, interaction.user.id)
+            state, summary = await max_synthesize(
+                self.bot.db, interaction.guild.id, interaction.user.id
+            )
             rows = [
                 (SYMBOLS[key], state["secrets"][key], *summary["secrets"][key])
                 for key in SECRETS
@@ -407,7 +520,13 @@ class SecretaeIncremental(commands.Cog):
                     (
                         text("game.max_synthesis.complete", locale),
                         f"```\n{_amount_table(rows, text('game.max_synthesis.change', locale), locale)}\n```",
-                        text("game.max_synthesis.shards", locale, symbol=SHARD_SYMBOL, spent=format_amount(summary["shards"][1]), remaining=format_amount(state["shards"])),
+                        text(
+                            "game.max_synthesis.shards",
+                            locale,
+                            symbol=SHARD_SYMBOL,
+                            spent=format_amount(summary["shards"][1]),
+                            remaining=format_amount(state["shards"]),
+                        ),
                     )
                 )
             )
@@ -421,16 +540,29 @@ class SecretaeIncremental(commands.Cog):
         if not concentration_available(state):
             return await self._error(
                 interaction,
-                ValueError(text("game.concentration.unavailable", await interaction_locale(interaction))),
+                ValueError(
+                    text(
+                        "game.concentration.unavailable",
+                        await interaction_locale(interaction),
+                    )
+                ),
             )
         gain = concentration_gain(state)
         if not gain.sign:
             return await self._error(
-                interaction, ValueError(text("game.concentration.no_gain", await interaction_locale(interaction)))
+                interaction,
+                ValueError(
+                    text(
+                        "game.concentration.no_gain",
+                        await interaction_locale(interaction),
+                    )
+                ),
             )
 
         locale = await interaction_locale(interaction)
-        view = ConcentrationView(self, interaction.guild.id, interaction.user.id, locale)
+        view = ConcentrationView(
+            self, interaction.guild.id, interaction.user.id, locale
+        )
         await interaction.response.send_message(
             f"{_concentration_text(state['essence'], gain, state['essence'] + gain, text('game.concentration.scheduled', locale), locale)}\n"
             + text("game.concentration.reset", locale),
@@ -541,7 +673,9 @@ class AlertTypeView(_PrivateAlertView):
     async def _choose(self, interaction, alert_type):
         self.stop()
         if alert_type == "disabled":
-            await save_alert_setting(self.cog.bot.db, self.guild_id, self.user_id, "disabled")
+            await save_alert_setting(
+                self.cog.bot.db, self.guild_id, self.user_id, "disabled"
+            )
             await interaction.response.edit_message(
                 content=text("game.alert.disabled", self.locale),
                 view=None,
@@ -549,16 +683,20 @@ class AlertTypeView(_PrivateAlertView):
             return
 
         description = text(
-            "game.alert.concentration_chosen" if alert_type == "concentration" else "game.alert.daily_chosen",
+            (
+                "game.alert.concentration_chosen"
+                if alert_type == "concentration"
+                else "game.alert.daily_chosen"
+            ),
             self.locale,
         )
-        await interaction.response.edit_message(
-            content=description, view=None
-        )
+        await interaction.response.edit_message(content=description, view=None)
         await interaction.followup.send(
             text("game.alert.choose_hour", self.locale),
             ephemeral=True,
-            view=AlertHourView(self.cog, self.guild_id, self.user_id, alert_type, self.locale),
+            view=AlertHourView(
+                self.cog, self.guild_id, self.user_id, alert_type, self.locale
+            ),
         )
 
     def __init__(self, cog, guild_id, user_id, locale="en"):
@@ -587,7 +725,10 @@ class AlertHourSelect(discord.ui.Select):
         super().__init__(
             placeholder=text("game.alert.hour_placeholder", locale),
             options=[
-                discord.SelectOption(label=text("game.alert.hour_label", locale, hour=hour), value=str(hour))
+                discord.SelectOption(
+                    label=text("game.alert.hour_label", locale, hour=hour),
+                    value=str(hour),
+                )
                 for hour in range(24)
             ],
         )
@@ -596,7 +737,9 @@ class AlertHourSelect(discord.ui.Select):
     async def callback(self, interaction):
         view = self.view
         hour = int(self.values[0])
-        await save_alert_setting(view.cog.bot.db, view.guild_id, view.user_id, self.alert_type, hour)
+        await save_alert_setting(
+            view.cog.bot.db, view.guild_id, view.user_id, self.alert_type, hour
+        )
         view.stop()
         await interaction.response.edit_message(
             content=text("game.alert.hour_set", view.locale, hour=hour), view=None

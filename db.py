@@ -9,6 +9,7 @@ import json
 import asyncpg
 from database.bootstrap import initialize_database
 
+
 async def _init_connection(conn) -> None:
     """Register JSON codecs once for every pooled connection."""
     await conn.set_type_codec(
@@ -27,6 +28,8 @@ async def _init_connection(conn) -> None:
 
 async def init_pool(dsn: str) -> asyncpg.Pool:
     """Create the application pool and bring its database schema up to date."""
+    # The per-connection callback installs JSON codecs before any schema code
+    # reads or writes JSONB game and community state.
     pool = await asyncpg.create_pool(dsn, init=_init_connection)
     async with pool.acquire() as conn:
         await initialize_database(conn)

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+
 async def initialize_community_schema(conn) -> None:
     """Create community-facing schema groups in dependency order."""
     await initialize_guild_game_schema(conn)
     await initialize_audit_and_rewards_schema(conn)
     await initialize_notice_schema(conn)
     await initialize_relay_schema(conn)
+
 
 async def initialize_guild_game_schema(conn) -> None:
     # Additive configuration foundation. Legacy tables remain intact while
@@ -141,6 +143,7 @@ async def initialize_guild_game_schema(conn) -> None:
         )
     """)
 
+
 async def initialize_audit_and_rewards_schema(conn) -> None:
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS admin_audit_log (
@@ -155,7 +158,9 @@ async def initialize_audit_and_rewards_schema(conn) -> None:
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     """)
-    await conn.execute("CREATE INDEX IF NOT EXISTS admin_audit_log_guild_created_idx ON admin_audit_log(guild_id, created_at DESC)")
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS admin_audit_log_guild_created_idx ON admin_audit_log(guild_id, created_at DESC)"
+    )
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS reward_reconciliation_cases (
             id BIGSERIAL PRIMARY KEY,
@@ -173,7 +178,10 @@ async def initialize_audit_and_rewards_schema(conn) -> None:
             UNIQUE(guild_id, source_type, contribution_message_id)
         )
     """)
-    await conn.execute("CREATE INDEX IF NOT EXISTS reward_reconciliation_pending_idx ON reward_reconciliation_cases(guild_id, state, created_at DESC)")
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS reward_reconciliation_pending_idx ON reward_reconciliation_cases(guild_id, state, created_at DESC)"
+    )
+
 
 async def initialize_notice_schema(conn) -> None:
     await conn.execute("""
@@ -233,7 +241,9 @@ async def initialize_notice_schema(conn) -> None:
             UNIQUE(queue_id, source_message_id)
         )
     """)
-    await conn.execute("CREATE INDEX IF NOT EXISTS notice_submissions_select_idx ON notice_submissions(queue_id, status, submitted_at)")
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS notice_submissions_select_idx ON notice_submissions(queue_id, status, submitted_at)"
+    )
     for statement in (
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS min_content_length INTEGER CHECK(min_content_length >= 0)",
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS max_content_length INTEGER CHECK(max_content_length >= min_content_length)",
@@ -261,6 +271,7 @@ async def initialize_notice_schema(conn) -> None:
             UNIQUE(queue_id, job_type, scheduled_for)
         )
     """)
+
 
 async def initialize_relay_schema(conn) -> None:
     await conn.execute("""
@@ -301,6 +312,12 @@ async def initialize_relay_schema(conn) -> None:
             UNIQUE(story_id, message_id)
         )
     """)
-    await conn.execute("CREATE INDEX IF NOT EXISTS relay_contributions_turn_idx ON relay_contributions(story_id, status, contributed_at DESC)")
-    await conn.execute("ALTER TABLE relay_stories ADD COLUMN IF NOT EXISTS moderator_policy TEXT")
-    await conn.execute("ALTER TABLE relay_stories ADD COLUMN IF NOT EXISTS moderator_role_id BIGINT")
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS relay_contributions_turn_idx ON relay_contributions(story_id, status, contributed_at DESC)"
+    )
+    await conn.execute(
+        "ALTER TABLE relay_stories ADD COLUMN IF NOT EXISTS moderator_policy TEXT"
+    )
+    await conn.execute(
+        "ALTER TABLE relay_stories ADD COLUMN IF NOT EXISTS moderator_role_id BIGINT"
+    )

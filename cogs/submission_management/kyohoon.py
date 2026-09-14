@@ -30,6 +30,7 @@ def _legacy_guild_id() -> int:
         raise RuntimeError("SECRET_ROOM_SERVER_ID must identify the legacy guild")
     return int(value)
 
+
 def _week_of_month(date: datetime.date) -> int:
     count = 0
     d = date.replace(day=1)
@@ -43,8 +44,8 @@ def _week_of_month(date: datetime.date) -> int:
 class KyohoonManagement(SubmissionManagementCog):
     def __init__(self, bot):
         super().__init__(bot)
-        with open('assets/message.yaml', encoding='utf-8') as f:
-            self._msgs = yaml.safe_load(f)['kyohoon']
+        with open("assets/message.yaml", encoding="utf-8") as f:
+            self._msgs = yaml.safe_load(f)["kyohoon"]
         self.update_Kyohoon.start()
 
     def cog_unload(self):
@@ -71,7 +72,9 @@ class KyohoonManagement(SubmissionManagementCog):
             await self.bot.db.execute(
                 "INSERT INTO kyohoon_submissions(thread_id, user_id, message_id) "
                 "VALUES($1, $2, $3) ON CONFLICT DO NOTHING",
-                latest_thread.id, msg.author.id, msg.id
+                latest_thread.id,
+                msg.author.id,
+                msg.id,
             )
 
     # ------------------------------------------------------------------ #
@@ -89,7 +92,9 @@ class KyohoonManagement(SubmissionManagementCog):
         await self._execute_kyohoon_update("자동", None)
 
     async def _retry_pending_rewards(self, trigger: str):
-        summary = await retry_pending_submission_rewards(self.bot.db, _legacy_guild_id(), "kyohoon")
+        summary = await retry_pending_submission_rewards(
+            self.bot.db, _legacy_guild_id(), "kyohoon"
+        )
         if summary["awarded"] or summary["already_awarded"] or summary["failed"]:
             await self._send_log_thread_message(
                 "[교훈 보상 재시도]\n"
@@ -100,19 +105,30 @@ class KyohoonManagement(SubmissionManagementCog):
             )
         return summary
 
-    async def _execute_kyohoon_update(self, trigger: str, operator, raise_errors: bool = True) -> bool:
+    async def _execute_kyohoon_update(
+        self, trigger: str, operator, raise_errors: bool = True
+    ) -> bool:
         started_at = datetime.datetime.now(KST)
         submission_ch = self._get_configured_channel("KYOHOON_SUBMISSION_ID")
-        notify_ch     = self._get_configured_channel("KYOHOON_NOTIFY_ID")
-        mgmt_thread   = self._get_configured_channel("KYOHOON_MANAGEMENT_ID")
+        notify_ch = self._get_configured_channel("KYOHOON_NOTIFY_ID")
+        mgmt_thread = self._get_configured_channel("KYOHOON_MANAGEMENT_ID")
 
         async with self._update_lock:
             try:
                 return await self._run_kyohoon_update(
-                    started_at, submission_ch, notify_ch, mgmt_thread, trigger, operator,
+                    started_at,
+                    submission_ch,
+                    notify_ch,
+                    mgmt_thread,
+                    trigger,
+                    operator,
                 )
             except Exception as exc:
-                tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5))
+                tb = "".join(
+                    traceback.format_exception(
+                        type(exc), exc, exc.__traceback__, limit=5
+                    )
+                )
                 await self._send_log_thread_message(
                     "[교훈 갱신 실패]\n"
                     f"- 실행 방식: {trigger}\n"
@@ -128,7 +144,9 @@ class KyohoonManagement(SubmissionManagementCog):
                     raise
                 return False
 
-    async def _run_kyohoon_update(self, started_at, submission_ch, notify_ch, mgmt_thread, trigger, operator):
+    async def _run_kyohoon_update(
+        self, started_at, submission_ch, notify_ch, mgmt_thread, trigger, operator
+    ):
         if submission_ch is None or notify_ch is None or mgmt_thread is None:
             await self._send_log_thread_message(
                 "[교훈 갱신 실패]\n"
@@ -158,7 +176,7 @@ class KyohoonManagement(SubmissionManagementCog):
         unposted = await self.bot.db.fetch(
             "SELECT user_id, message_id FROM kyohoon_submissions "
             "WHERE thread_id = $1 AND posted_at IS NULL ORDER BY submitted_at",
-            latest_sub_thread.id
+            latest_sub_thread.id,
         )
         if not unposted:
             await self._send_log_thread_message(
@@ -179,23 +197,32 @@ class KyohoonManagement(SubmissionManagementCog):
         while unposted:
             priorities = []
             for row in unposted:
-                last = await self.bot.db.fetchval(
-                    "SELECT MAX(posted_at) FROM kyohoon_submissions "
-                    "WHERE user_id = $1 AND posted_at IS NOT NULL",
-                    row['user_id']
-                ) or epoch
-                priorities.append((last, row['message_id'], row))
+                last = (
+                    await self.bot.db.fetchval(
+                        "SELECT MAX(posted_at) FROM kyohoon_submissions "
+                        "WHERE user_id = $1 AND posted_at IS NOT NULL",
+                        row["user_id"],
+                    )
+                    or epoch
+                )
+                priorities.append((last, row["message_id"], row))
             selected = min(priorities, key=lambda x: (x[0], x[1]))[2]
 
             try:
-                submission_msg = await latest_sub_thread.fetch_message(selected['message_id'])
+                submission_msg = await latest_sub_thread.fetch_message(
+                    selected["message_id"]
+                )
                 break
             except discord.NotFound:
                 await self.bot.db.execute(
                     "DELETE FROM kyohoon_submissions WHERE message_id = $1",
-                    selected['message_id'],
+                    selected["message_id"],
                 )
-                unposted = [row for row in unposted if row['message_id'] != selected['message_id']]
+                unposted = [
+                    row
+                    for row in unposted
+                    if row["message_id"] != selected["message_id"]
+                ]
 
         if submission_msg is None:
             await self._send_log_thread_message(
@@ -212,9 +239,11 @@ class KyohoonManagement(SubmissionManagementCog):
 
         # 이-주의-교훈 채널에 새 스레드로 등록
         now_kst = datetime.datetime.now(KST)
-        week  = _week_of_month(now_kst.date())
+        week = _week_of_month(now_kst.date())
         title = f"{now_kst.month}월 {week}주차, {submission_msg.author.display_name}"
-        files = [await attachment.to_file() for attachment in submission_msg.attachments]
+        files = [
+            await attachment.to_file() for attachment in submission_msg.attachments
+        ]
         content_chunks = split_discord_message_content(submission_msg.content)
         created = await notify_ch.create_thread(
             name=title,
@@ -233,7 +262,9 @@ class KyohoonManagement(SubmissionManagementCog):
             await self.bot.db.execute(
                 "UPDATE kyohoon_submissions SET posted_at = $1, reward_posted_thread_id = $2, "
                 "rewarded_at = NULL WHERE message_id = $3",
-                now_kst, publication_thread.id, selected['message_id'],
+                now_kst,
+                publication_thread.id,
+                selected["message_id"],
             )
         except Exception as exc:
             await self._send_log_thread_message(
@@ -266,14 +297,18 @@ class KyohoonManagement(SubmissionManagementCog):
                 )
             try:
                 await publication_thread.send(
-                    self._format_kyohoon_reward(reward, submission_msg.author.display_name)
+                    self._format_kyohoon_reward(
+                        reward, submission_msg.author.display_name
+                    )
                 )
             except discord.HTTPException as exc:
                 await self._send_log_thread_message(
                     f"[교훈 보상 게시 알림 실패] 신청 메시지 `{submission_msg.id}`: {type(exc).__name__}: {exc}"
                 )
         try:
-            await self._update_management_message(mgmt_thread, latest_sub_thread.id, latest_sub_thread.name)
+            await self._update_management_message(
+                mgmt_thread, latest_sub_thread.id, latest_sub_thread.name
+            )
         except discord.HTTPException as exc:
             await self._send_log_thread_message(
                 f"[교훈 관리 메시지 갱신 실패] 게시 상태는 저장되었습니다. ({type(exc).__name__}: {exc})"
@@ -282,11 +317,13 @@ class KyohoonManagement(SubmissionManagementCog):
         # 모든 신청이 게시되었으면 새 신청 스레드 생성
         remaining = await self.bot.db.fetchval(
             "SELECT COUNT(*) FROM kyohoon_submissions WHERE thread_id = $1 AND posted_at IS NULL",
-            latest_sub_thread.id
+            latest_sub_thread.id,
         )
         created_submission_thread = None
         if remaining == 0:
-            created_submission_thread = await self._create_kyohoon_submission_thread(submission_ch, now_kst)
+            created_submission_thread = await self._create_kyohoon_submission_thread(
+                submission_ch, now_kst
+            )
 
         await self._send_log_thread_message(
             "[교훈 갱신 성공]\n"
@@ -325,7 +362,13 @@ class KyohoonManagement(SubmissionManagementCog):
     async def _handle_force_operation(self, message) -> bool:
         command = message.content.strip()
         if not (
-            command in ("!force_update", "!force_submission", "!toggle_kyohoon", "!force_reward")
+            command
+            in (
+                "!force_update",
+                "!force_submission",
+                "!toggle_kyohoon",
+                "!force_reward",
+            )
             or command.startswith("!reward_lookup ")
         ):
             return False
@@ -338,7 +381,9 @@ class KyohoonManagement(SubmissionManagementCog):
             return True
 
         if command == "!force_reward":
-            summary = await retry_pending_submission_rewards(self.bot.db, _legacy_guild_id())
+            summary = await retry_pending_submission_rewards(
+                self.bot.db, _legacy_guild_id()
+            )
             failed = "\n".join(
                 f"- {kind} `{message_id}`: {reason}"
                 for kind, message_id, reason in summary["failed"]
@@ -366,7 +411,9 @@ class KyohoonManagement(SubmissionManagementCog):
                 return True
             reward = await get_submission_reward(self.bot.db, int(message_id))
             if reward is None:
-                await message.channel.send("해당 메시지 ID의 증분형 게임 보상 기록이 없습니다.")
+                await message.channel.send(
+                    "해당 메시지 ID의 증분형 게임 보상 기록이 없습니다."
+                )
                 return True
             await message.channel.send(
                 "[증분형 보상 조회]\n"
@@ -391,11 +438,13 @@ class KyohoonManagement(SubmissionManagementCog):
             return True
 
         if command == "!force_update":
-            ok = await self._execute_kyohoon_update("강제", message.author, raise_errors=False)
+            ok = await self._execute_kyohoon_update(
+                "강제", message.author, raise_errors=False
+            )
             await message.channel.send(
                 "교훈 갱신을 강제로 실행했습니다. 상세 결과는 LOG_THREAD를 확인해 주세요."
-                if ok else
-                "교훈 갱신 강제 실행에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요."
+                if ok
+                else "교훈 갱신 강제 실행에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요."
             )
             return True
 
@@ -408,13 +457,19 @@ class KyohoonManagement(SubmissionManagementCog):
                 f"- 실행 시각: {started_at:%Y-%m-%d %H:%M:%S KST}\n"
                 "- 사유: KYOHOON_SUBMISSION_ID 채널을 찾지 못했습니다."
             )
-            await message.channel.send("교훈 신청 스레드 강제 생성에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요.")
+            await message.channel.send(
+                "교훈 신청 스레드 강제 생성에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요."
+            )
             return True
 
         try:
-            new_thread = await self._create_kyohoon_submission_thread(submission_ch, started_at)
+            new_thread = await self._create_kyohoon_submission_thread(
+                submission_ch, started_at
+            )
         except Exception as exc:
-            tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5))
+            tb = "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__, limit=5)
+            )
             await self._send_log_thread_message(
                 "[교훈 신청 스레드 강제 생성 실패]\n"
                 f"- 실행자: {message.author.mention}\n"
@@ -423,7 +478,9 @@ class KyohoonManagement(SubmissionManagementCog):
                 f"- 사유: 예외 발생 (`{type(exc).__name__}: {exc}`)\n"
                 f"```py\n{tb[-1500:]}\n```"
             )
-            await message.channel.send("교훈 신청 스레드 강제 생성에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요.")
+            await message.channel.send(
+                "교훈 신청 스레드 강제 생성에 실패했습니다. 상세 사유는 LOG_THREAD를 확인해 주세요."
+            )
             return True
 
         await self._send_log_thread_message(
@@ -433,7 +490,9 @@ class KyohoonManagement(SubmissionManagementCog):
             f"- 신청 채널: {_channel_detail(submission_ch)}\n"
             f"- 생성된 스레드: {new_thread.mention} (`{new_thread.id}`, {new_thread.name})"
         )
-        await message.channel.send(f"교훈 신청 스레드를 강제로 생성했습니다: {new_thread.mention}")
+        await message.channel.send(
+            f"교훈 신청 스레드를 강제로 생성했습니다: {new_thread.mention}"
+        )
         return True
 
     # ------------------------------------------------------------------ #
@@ -448,7 +507,9 @@ class KyohoonManagement(SubmissionManagementCog):
         if thread.owner_id == self.bot.user.id:
             return
         try:
-            await thread.delete(reason="Only bot-created Kyohoon submission threads are allowed")
+            await thread.delete(
+                reason="Only bot-created Kyohoon submission threads are allowed"
+            )
         except discord.HTTPException:
             await self._send_log_thread_message(
                 f"[교훈 신청 스레드 삭제 실패] 비공식 스레드 `{thread.id}`를 삭제하지 못했습니다."
@@ -469,17 +530,19 @@ class KyohoonManagement(SubmissionManagementCog):
             return
 
         latest_thread = await _get_latest_thread(submission_ch, self.bot.user.id)
-        log_thread    = self._get_configured_channel("LOG_THREAD_ID")
-        mgmt_thread   = self._get_configured_channel("KYOHOON_MANAGEMENT_ID")
+        log_thread = self._get_configured_channel("LOG_THREAD_ID")
+        mgmt_thread = self._get_configured_channel("KYOHOON_MANAGEMENT_ID")
 
         content = message.content
-        author  = message.author
+        author = message.author
 
         # 최신 스레드가 아닌 경우
         if latest_thread is None or message.channel.id != latest_thread.id:
             await message.delete()
             try:
-                await author.send(self._msgs['not_latest_thread'].format(content=content))
+                await author.send(
+                    self._msgs["not_latest_thread"].format(content=content)
+                )
             except discord.Forbidden:
                 pass
             if log_thread:
@@ -491,12 +554,15 @@ class KyohoonManagement(SubmissionManagementCog):
         # 중복 신청 검사
         existing = await self.bot.db.fetchrow(
             "SELECT 1 FROM kyohoon_submissions WHERE thread_id = $1 AND user_id = $2",
-            message.channel.id, author.id
+            message.channel.id,
+            author.id,
         )
         if existing:
             await message.delete()
             try:
-                await author.send(self._msgs['duplicate_submission'].format(content=content))
+                await author.send(
+                    self._msgs["duplicate_submission"].format(content=content)
+                )
             except discord.Forbidden:
                 pass
             if log_thread:
@@ -508,40 +574,56 @@ class KyohoonManagement(SubmissionManagementCog):
         # 신청 등록 및 관리 메시지 갱신
         await self.bot.db.execute(
             "INSERT INTO kyohoon_submissions(thread_id, user_id, message_id) VALUES($1, $2, $3)",
-            message.channel.id, author.id, message.id
+            message.channel.id,
+            author.id,
+            message.id,
         )
         if mgmt_thread:
-            await self._update_management_message(mgmt_thread, message.channel.id, message.channel.name)
+            await self._update_management_message(
+                mgmt_thread, message.channel.id, message.channel.name
+            )
+
     # ------------------------------------------------------------------ #
     # 신청 메시지 수정/삭제 감지
     # ------------------------------------------------------------------ #
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload):
-        author_data = payload.data.get('author', {})
-        if author_data.get('bot'):
+        author_data = payload.data.get("author", {})
+        if author_data.get("bot"):
             return
-        user_id_str = author_data.get('id')
+        user_id_str = author_data.get("id")
         if not user_id_str:
             return
-        await self._check_posted_modification(payload.channel_id, payload.message_id, int(user_id_str))
+        await self._check_posted_modification(
+            payload.channel_id, payload.message_id, int(user_id_str)
+        )
 
     @commands.Cog.listener()
     async def on_raw_message_delete(self, payload):
         user_id = None
         if payload.cached_message and not payload.cached_message.author.bot:
             user_id = payload.cached_message.author.id
-        await self._delete_submission_on_message_delete(payload.channel_id, payload.message_id, user_id)
+        await self._delete_submission_on_message_delete(
+            payload.channel_id, payload.message_id, user_id
+        )
 
     @commands.Cog.listener()
     async def on_raw_bulk_message_delete(self, payload):
         for message_id in payload.message_ids:
-            await self._delete_submission_on_message_delete(payload.channel_id, message_id, None)
+            await self._delete_submission_on_message_delete(
+                payload.channel_id, message_id, None
+            )
 
-    async def _delete_submission_on_message_delete(self, channel_id: int, message_id: int, user_id: int | None):
+    async def _delete_submission_on_message_delete(
+        self, channel_id: int, message_id: int, user_id: int | None
+    ):
         submission_ch_id = int(os.getenv("KYOHOON_SUBMISSION_ID"))
         channel = await _get_channel(self.bot, channel_id)
-        if not isinstance(channel, discord.Thread) or channel.parent_id != submission_ch_id:
+        if (
+            not isinstance(channel, discord.Thread)
+            or channel.parent_id != submission_ch_id
+        ):
             return
 
         row = await self.bot.db.fetchrow(
@@ -553,16 +635,23 @@ class KyohoonManagement(SubmissionManagementCog):
             mgmt_thread = self._get_configured_channel("KYOHOON_MANAGEMENT_ID")
             if mgmt_thread:
                 try:
-                    await self._update_management_message(mgmt_thread, channel.id, channel.name)
+                    await self._update_management_message(
+                        mgmt_thread, channel.id, channel.name
+                    )
                 except discord.HTTPException:
                     pass
-        if row is not None and row['posted_at'] is not None:
+        if row is not None and row["posted_at"] is not None:
             await self._check_posted_modification(channel_id, message_id, user_id, row)
 
-    async def _check_posted_modification(self, channel_id: int, message_id: int, user_id: int | None, row=None):
+    async def _check_posted_modification(
+        self, channel_id: int, message_id: int, user_id: int | None, row=None
+    ):
         submission_ch_id = int(os.getenv("KYOHOON_SUBMISSION_ID"))
         channel = await _get_channel(self.bot, channel_id)
-        if not isinstance(channel, discord.Thread) or channel.parent_id != submission_ch_id:
+        if (
+            not isinstance(channel, discord.Thread)
+            or channel.parent_id != submission_ch_id
+        ):
             return
 
         submission_ch = self._get_configured_channel("KYOHOON_SUBMISSION_ID")
@@ -575,19 +664,19 @@ class KyohoonManagement(SubmissionManagementCog):
         if row is None:
             row = await self.bot.db.fetchrow(
                 "SELECT user_id, posted_at FROM kyohoon_submissions WHERE message_id = $1",
-                message_id
+                message_id,
             )
-        if row is None or row['posted_at'] is None:
+        if row is None or row["posted_at"] is None:
             return
 
         if user_id is None:
-            user_id = row['user_id']
+            user_id = row["user_id"]
 
-        user       = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+        user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
         log_thread = self._get_configured_channel("LOG_THREAD_ID")
 
         try:
-            await user.send(self._msgs['edit_after_posted'])
+            await user.send(self._msgs["edit_after_posted"])
         except discord.Forbidden:
             pass
         if log_thread:
@@ -599,16 +688,18 @@ class KyohoonManagement(SubmissionManagementCog):
     # 관리 메시지 갱신 (교훈 관리 스레드)
     # ------------------------------------------------------------------ #
 
-    async def _update_management_message(self, mgmt_thread, thread_id: int, thread_name: str):
+    async def _update_management_message(
+        self, mgmt_thread, thread_id: int, thread_name: str
+    ):
         rows = await self.bot.db.fetch(
             "SELECT user_id, posted_at FROM kyohoon_submissions "
             "WHERE thread_id = $1 ORDER BY submitted_at",
-            thread_id
+            thread_id,
         )
 
         lines = [f"**{thread_name} 신청 현황**"]
         for row in rows:
-            status = "✅ 게시됨" if row['posted_at'] else "⏳ 대기중"
+            status = "✅ 게시됨" if row["posted_at"] else "⏳ 대기중"
             lines.append(f"- <@{row['user_id']}> ({status})")
         content = "\n".join(lines)
         if len(content) > 2000:
@@ -616,7 +707,7 @@ class KyohoonManagement(SubmissionManagementCog):
 
         mgmt_msg_id = await self.bot.db.fetchval(
             "SELECT message_id FROM kyohoon_mgmt_messages WHERE thread_id = $1",
-            thread_id
+            thread_id,
         )
         if mgmt_msg_id:
             try:
@@ -630,15 +721,20 @@ class KyohoonManagement(SubmissionManagementCog):
         await self.bot.db.execute(
             "INSERT INTO kyohoon_mgmt_messages(thread_id, message_id) VALUES($1, $2) "
             "ON CONFLICT(thread_id) DO UPDATE SET message_id = EXCLUDED.message_id",
-            thread_id, new_msg.id
+            thread_id,
+            new_msg.id,
         )
 
-    def _format_kyohoon_reward(self, reward: dict, recipient_name: str | None = None) -> str:
+    def _format_kyohoon_reward(
+        self, reward: dict, recipient_name: str | None = None
+    ) -> str:
         """커밋된 인크리멘탈 교훈 보상을 DM 또는 공개 스레드용으로 렌더링합니다."""
         before = format_amount(LayeredDecimal.from_json(reward["before_essence"]))
         after = format_amount(LayeredDecimal.from_json(reward["after_essence"]))
         gained = format_amount(LayeredDecimal.from_json(reward["reward_amount"]))
-        recipient = f"{recipient_name} 님이 이 교훈을 게시하여 " if recipient_name else ""
+        recipient = (
+            f"{recipient_name} 님이 이 교훈을 게시하여 " if recipient_name else ""
+        )
         return (
             f"{recipient}이야기의 정수 보상을 받았습니다.\n"
             f"정수: {before} → {after} (획득 {gained})\n"

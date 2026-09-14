@@ -1,3 +1,3 @@
-"""교훈 코그 확장을 위한 호환 진입점입니다."""
+"""The entrance of Kyohoon cog."""
 
 from .submission_management.kyohoon import setup

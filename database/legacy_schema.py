@@ -121,4 +121,3 @@ async def initialize_legacy_schema(conn) -> None:
             applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
     """)
-
