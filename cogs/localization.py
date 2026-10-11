@@ -81,6 +81,17 @@ def text(key: str, locale: object | None = None, /, **values: Any) -> str:
     return template.format(**values)
 
 
+def command_name(name: str) -> app_commands.locale_str:
+    """Mark a stable command identifier for Discord-native name localization.
+
+    Application-command metadata is selected by Discord before the bot receives
+    an interaction.  Keeping the default name in English makes declarations
+    consistent, while :class:`CommandTranslator` supplies the Korean display
+    name for members whose Discord client uses Korean.
+    """
+    return app_commands.locale_str(name)
+
+
 async def guild_locale(db, guild_id: int, discord_locale: object | None = None) -> str:
     """Resolve configured guild locale, then Discord locale, then English."""
     configured = await db.fetchval(
@@ -112,6 +123,55 @@ class CommandTranslator(app_commands.Translator):
     """
 
     _copy = {
+        # Command names are English source identifiers. Discord selects these
+        # localized forms per member before an interaction reaches the bot.
+        "admin": {"ko": "관리"},
+        "setup": {"ko": "설정"},
+        "queue": {"ko": "대기열"},
+        "relay": {"ko": "릴레이"},
+        "game": {"ko": "게임"},
+        "diagnostics": {"ko": "진단"},
+        "start": {"ko": "시작"},
+        "status": {"ko": "현황"},
+        "set-language": {"ko": "언어설정"},
+        "set-admin-role": {"ko": "관리자역할설정"},
+        "set-audit-channel": {"ko": "감사채널설정"},
+        "set-moderators": {"ko": "운영진설정"},
+        "enable": {"ko": "활성화"},
+        "disable": {"ko": "비활성화"},
+        "set-name": {"ko": "이름설정"},
+        "reward-policy": {"ko": "보상정책"},
+        "reward-rollback": {"ko": "보상되돌리기"},
+        "reward-review": {"ko": "보상검토"},
+        "reward-reconciliations": {"ko": "보상조정목록"},
+        "resolve-reconciliation": {"ko": "보상조정완료"},
+        "create": {"ko": "생성"},
+        "list": {"ko": "목록"},
+        "view": {"ko": "보기"},
+        "edit": {"ko": "수정"},
+        "configure": {"ko": "구성"},
+        "set-channels": {"ko": "채널설정"},
+        "configure-submissions": {"ko": "신청설정"},
+        "pause": {"ko": "일시정지"},
+        "resume": {"ko": "재개"},
+        "archive": {"ko": "보관"},
+        "open-submissions": {"ko": "신청열기"},
+        "publish-now": {"ko": "지금게시"},
+        "retry": {"ko": "재시도"},
+        "moderate": {"ko": "검수"},
+        "pin-rules": {"ko": "규칙고정"},
+        "configure-posting": {"ko": "게시설정"},
+        "remove": {"ko": "삭제"},
+        "reward": {"ko": "보상"},
+        "migration": {"ko": "마이그레이션"},
+        "help": {"ko": "도움말"},
+        "rewards": {"ko": "보상"},
+        "alerts": {"ko": "알림"},
+        "produce": {"ko": "생산"},
+        "synthesize": {"ko": "합성"},
+        "prices": {"ko": "가격"},
+        "max-synthesize": {"ko": "최대합성"},
+        "concentrate": {"ko": "농축"},
         "Configure and operate CommunityNoticeBot.": {
             "ko": "CommunityNoticeBot을 구성하고 운영합니다."
         },

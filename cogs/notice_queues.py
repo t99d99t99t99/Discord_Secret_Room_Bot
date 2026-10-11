@@ -241,7 +241,22 @@ class NoticeQueueService(commands.Cog):
             timezone_name,
         )
 
-    async def _validate_channel(self, guild_id: int, channel_id: int, purpose: str):
+    async def _validate_channel(
+        self,
+        guild_id: int,
+        channel_id: int,
+        purpose: str,
+        *,
+        exclude_queue_id: int | None = None,
+    ):
+        """Verify a queue channel is usable and is not owned by another feature.
+
+        A submission or publication channel has one community-feature owner.
+        Without this check a member message can be accepted by both a notice
+        queue and a relay story, or by two queues with incompatible policies.
+        ``exclude_queue_id`` lets an existing queue retain either of its own
+        configured channels while its permissions are rechecked.
+        """
         channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(
             channel_id
         )
@@ -261,6 +276,23 @@ class NoticeQueueService(commands.Cog):
             raise ValueError(
                 "봇에 채널 보기, 메시지 보내기, 기록 보기 및 필요한 스레드 생성 권한이 없습니다."
             )
+        queue_owner = await self.bot.db.fetchval(
+            "SELECT id FROM notice_queues WHERE guild_id=$1 "
+            "AND (submission_channel_id=$2 OR publication_channel_id=$2) "
+            "AND ($3::BIGINT IS NULL OR id <> $3) LIMIT 1",
+            guild_id,
+            channel_id,
+            exclude_queue_id,
+        )
+        if queue_owner is not None:
+            raise ValueError("이 채널은 다른 공지 대기열에서 이미 사용 중입니다.")
+        story_owner = await self.bot.db.fetchval(
+            "SELECT id FROM relay_stories WHERE guild_id=$1 AND channel_id=$2 LIMIT 1",
+            guild_id,
+            channel_id,
+        )
+        if story_owner is not None:
+            raise ValueError("이 채널은 다른 릴레이 이야기에서 이미 사용 중입니다.")
 
     async def _alert(self, guild_id: int, content: str):
         audit_id = await self.bot.db.fetchval(
@@ -282,7 +314,10 @@ class NoticeQueueService(commands.Cog):
         if queue is None:
             raise ValueError("Queue not found.")
         await self._validate_channel(
-            queue["guild_id"], queue["submission_channel_id"], "submission"
+            queue["guild_id"],
+            queue["submission_channel_id"],
+            "submission",
+            exclude_queue_id=queue_id,
         )
         channel = self.bot.get_channel(
             queue["submission_channel_id"]
@@ -525,7 +560,10 @@ class NoticeQueueService(commands.Cog):
                 queue["publication_channel_id"]
             ) or await self.bot.fetch_channel(queue["publication_channel_id"])
             await self._validate_channel(
-                queue["guild_id"], queue["publication_channel_id"], "publication"
+                queue["guild_id"],
+                queue["publication_channel_id"],
+                "publication",
+                exclude_queue_id=queue_id,
             )
             author = (
                 source_message.author.display_name

@@ -16,7 +16,7 @@ from discord.ext import commands
 
 from .secretae_incremental.db import get_submission_reward
 from .game_config import REWARD_TYPES, reward_policy, reward_policy_label
-from .localization import guild_locale, interaction_locale, text
+from .localization import command_name, guild_locale, interaction_locale, text
 from .admin_support import ConfirmationView, guild_settings as _settings
 
 
@@ -24,24 +24,30 @@ class Admin(commands.Cog):
     """The administrative surface for every guild."""
 
     admin = app_commands.Group(
-        name="admin",
+        name=command_name("admin"),
         description="Configure and operate CommunityNoticeBot.",
         default_permissions=discord.Permissions(manage_guild=True),
     )
     setup = app_commands.Group(
-        name="setup", description="Guided server setup.", parent=admin
+        name=command_name("setup"), description="Guided server setup.", parent=admin
     )
     queue = app_commands.Group(
-        name="queue", description="Operate imported notice queues.", parent=admin
+        name=command_name("queue"),
+        description="Operate imported notice queues.",
+        parent=admin,
     )
     relay = app_commands.Group(
-        name="relay", description="릴레이 이야기를 관리합니다.", parent=admin
+        name=command_name("relay"),
+        description="릴레이 이야기를 관리합니다.",
+        parent=admin,
     )
     game = app_commands.Group(
-        name="game", description="Essence Foundry 게임을 관리합니다.", parent=admin
+        name=command_name("game"),
+        description="Essence Foundry 게임을 관리합니다.",
+        parent=admin,
     )
     diagnostics = app_commands.Group(
-        name="diagnostics",
+        name=command_name("diagnostics"),
         description="Inspect configuration and legacy migration state.",
         parent=admin,
     )
@@ -394,7 +400,9 @@ class Admin(commands.Cog):
             ),
         )
 
-    @setup.command(name="start", description="Start or resume guided setup.")
+    @setup.command(
+        name=command_name("start"), description="Start or resume guided setup."
+    )
     async def setup_start(self, interaction: discord.Interaction):
         assert interaction.guild is not None
         previous = await _settings(self.bot.db, interaction.guild.id)
@@ -424,7 +432,8 @@ class Admin(commands.Cog):
         )
 
     @setup.command(
-        name="status", description="Show setup progress and disabled optional features."
+        name=command_name("status"),
+        description="Show setup progress and disabled optional features.",
     )
     async def setup_status(self, interaction: discord.Interaction):
         assert interaction.guild is not None
@@ -460,7 +469,8 @@ class Admin(commands.Cog):
         )
 
     @setup.command(
-        name="set-language", description="Set the server's default language."
+        name=command_name("set-language"),
+        description="Set the server's default language.",
     )
     @app_commands.choices(
         locale=[
@@ -495,7 +505,8 @@ class Admin(commands.Cog):
         )
 
     @setup.command(
-        name="set-admin-role", description="Allow a role to administer the bot."
+        name=command_name("set-admin-role"),
+        description="Allow a role to administer the bot.",
     )
     async def set_admin_role(
         self, interaction: discord.Interaction, role: discord.Role | None = None
@@ -527,7 +538,7 @@ class Admin(commands.Cog):
         )
 
     @setup.command(
-        name="set-audit-channel",
+        name=command_name("set-audit-channel"),
         description="Set the optional administrator audit destination.",
     )
     async def set_audit_channel(
@@ -559,7 +570,8 @@ class Admin(commands.Cog):
         )
 
     @setup.command(
-        name="set-moderators", description="Configure queue/story moderation authority."
+        name=command_name("set-moderators"),
+        description="Configure queue/story moderation authority.",
     )
     @app_commands.choices(
         policy=[
@@ -606,7 +618,8 @@ class Admin(commands.Cog):
         )
 
     @game.command(
-        name="status", description="게임 활성화 상태와 구성된 보상을 확인합니다."
+        name=command_name("status"),
+        description="게임 활성화 상태와 구성된 보상을 확인합니다.",
     )
     async def game_status(self, interaction: discord.Interaction):
         assert interaction.guild is not None
@@ -655,7 +668,9 @@ class Admin(commands.Cog):
             ephemeral=True,
         )
 
-    @game.command(name="enable", description="이 서버의 게임을 활성화합니다.")
+    @game.command(
+        name=command_name("enable"), description="이 서버의 게임을 활성화합니다."
+    )
     async def game_enable(self, interaction: discord.Interaction):
         assert interaction.guild is not None
 
@@ -679,7 +694,9 @@ class Admin(commands.Cog):
             apply,
         )
 
-    @game.command(name="disable", description="이 서버의 게임을 비활성화합니다.")
+    @game.command(
+        name=command_name("disable"), description="이 서버의 게임을 비활성화합니다."
+    )
     async def game_disable(self, interaction: discord.Interaction):
         assert interaction.guild is not None
 
@@ -706,7 +723,8 @@ class Admin(commands.Cog):
         )
 
     @game.command(
-        name="set-name", description="서버에서 표시할 게임 이름을 설정합니다."
+        name=command_name("set-name"),
+        description="서버에서 표시할 게임 이름을 설정합니다.",
     )
     async def game_set_name(self, interaction: discord.Interaction, name: str):
         assert interaction.guild is not None
@@ -735,7 +753,7 @@ class Admin(commands.Cog):
         )
 
     @game.command(
-        name="reward-policy",
+        name=command_name("reward-policy"),
         description="공지 대기열 또는 릴레이 이야기의 보상 정책을 설정합니다.",
     )
     @app_commands.choices(
@@ -806,7 +824,7 @@ class Admin(commands.Cog):
         )
 
     @game.command(
-        name="reward-rollback",
+        name=command_name("reward-rollback"),
         description="지급 직전 스냅샷으로 플레이어 상태를 전체 되돌립니다.",
     )
     async def game_reward_rollback(
@@ -856,7 +874,8 @@ class Admin(commands.Cog):
         )
 
     @game.command(
-        name="reward-review", description="지급·스냅샷·조정 상태를 검토합니다."
+        name=command_name("reward-review"),
+        description="지급·스냅샷·조정 상태를 검토합니다.",
     )
     async def game_reward_review(
         self, interaction: discord.Interaction, ledger_id: int
@@ -918,7 +937,7 @@ class Admin(commands.Cog):
         )
 
     @game.command(
-        name="reward-reconciliations",
+        name=command_name("reward-reconciliations"),
         description="삭제·부적격 기여의 보상 검토 대기 목록을 봅니다.",
     )
     async def game_reward_reconciliations(self, interaction: discord.Interaction):
@@ -971,7 +990,7 @@ class Admin(commands.Cog):
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
     @game.command(
-        name="resolve-reconciliation",
+        name=command_name("resolve-reconciliation"),
         description="외부/수동 보상 조정을 감사 기록으로 완료 처리합니다.",
     )
     async def game_resolve_reconciliation(
@@ -1044,7 +1063,8 @@ class Admin(commands.Cog):
         return row
 
     @queue.command(
-        name="create", description="Create an active notice queue with safe defaults."
+        name=command_name("create"),
+        description="Create an active notice queue with safe defaults.",
     )
     @app_commands.choices(
         cadence=[
@@ -1128,7 +1148,9 @@ class Admin(commands.Cog):
             ephemeral=True,
         )
 
-    @queue.command(name="list", description="List this server's notice queues.")
+    @queue.command(
+        name=command_name("list"), description="List this server's notice queues."
+    )
     async def queue_list(self, interaction: discord.Interaction):
         assert interaction.guild is not None
         rows = await self.bot.db.fetch(
@@ -1162,7 +1184,8 @@ class Admin(commands.Cog):
         await interaction.response.send_message(rendered, ephemeral=True)
 
     @queue.command(
-        name="view", description="View notice queue configuration and health."
+        name=command_name("view"),
+        description="View notice queue configuration and health.",
     )
     async def queue_view(self, interaction: discord.Interaction, queue_id: int):
         assert interaction.guild is not None
@@ -1224,7 +1247,8 @@ class Admin(commands.Cog):
         )
 
     @queue.command(
-        name="edit", description="Edit queue name, description, or accepting state."
+        name=command_name("edit"),
+        description="Edit queue name, description, or accepting state.",
     )
     async def queue_edit(
         self,
@@ -1263,7 +1287,7 @@ class Admin(commands.Cog):
         )
 
     @queue.command(
-        name="configure",
+        name=command_name("configure"),
         description="Configure selection, schedule, limits, attribution, and template.",
     )
     @app_commands.choices(
@@ -1380,7 +1404,7 @@ class Admin(commands.Cog):
         )
 
     @queue.command(
-        name="set-channels",
+        name=command_name("set-channels"),
         description="Redirect submission/publication channels after confirmation.",
     )
     async def queue_set_channels(
@@ -1421,10 +1445,16 @@ class Admin(commands.Cog):
         async def apply():
             service = self.bot.get_cog("NoticeQueueService")
             await service._validate_channel(
-                interaction.guild.id, submission_channel.id, "submission"
+                interaction.guild.id,
+                submission_channel.id,
+                "submission",
+                exclude_queue_id=queue_id,
             )
             await service._validate_channel(
-                interaction.guild.id, publication_channel.id, "publication"
+                interaction.guild.id,
+                publication_channel.id,
+                "publication",
+                exclude_queue_id=queue_id,
             )
             await self.bot.db.execute(
                 "UPDATE notice_queues SET submission_channel_id=$2,publication_channel_id=$3,active_submission_thread_id=NULL,accepting_submissions=FALSE,config_version=config_version+1,updated_at=NOW() WHERE id=$1",
@@ -1457,7 +1487,7 @@ class Admin(commands.Cog):
         )
 
     @queue.command(
-        name="configure-submissions",
+        name=command_name("configure-submissions"),
         description="신청 내용, 수정, 첨부파일, 링크 정책을 설정합니다.",
     )
     @app_commands.choices(
@@ -1582,7 +1612,7 @@ class Admin(commands.Cog):
             text("admin.queue.submission_policy_done", locale), ephemeral=True
         )
 
-    @queue.command(name="pause", description="Pause a notice queue.")
+    @queue.command(name=command_name("pause"), description="Pause a notice queue.")
     async def queue_pause(self, interaction: discord.Interaction, queue_id: int):
         assert interaction.guild is not None
         try:
@@ -1609,7 +1639,9 @@ class Admin(commands.Cog):
             ephemeral=True,
         )
 
-    @queue.command(name="resume", description="Resume a paused notice queue.")
+    @queue.command(
+        name=command_name("resume"), description="Resume a paused notice queue."
+    )
     async def queue_resume(self, interaction: discord.Interaction, queue_id: int):
         assert interaction.guild is not None
         try:
@@ -1637,7 +1669,7 @@ class Admin(commands.Cog):
         )
 
     @queue.command(
-        name="archive",
+        name=command_name("archive"),
         description="Archive a queue after confirmation; submissions are retained.",
     )
     async def queue_archive(self, interaction: discord.Interaction, queue_id: int):
@@ -1671,7 +1703,10 @@ class Admin(commands.Cog):
             apply,
         )
 
-    @queue.command(name="open-submissions", description="Open a new submission thread.")
+    @queue.command(
+        name=command_name("open-submissions"),
+        description="Open a new submission thread.",
+    )
     async def queue_open_submissions(
         self, interaction: discord.Interaction, queue_id: int
     ):
@@ -1708,7 +1743,7 @@ class Admin(commands.Cog):
         )
 
     @queue.command(
-        name="publish-now",
+        name=command_name("publish-now"),
         description="Publish the oldest eligible entry now (confirmation required).",
     )
     async def queue_publish_now(self, interaction: discord.Interaction, queue_id: int):
@@ -1744,7 +1779,7 @@ class Admin(commands.Cog):
         )
 
     @queue.command(
-        name="retry",
+        name=command_name("retry"),
         description="Return a failed/selected submission to eligibility for safe retry.",
     )
     async def queue_retry(self, interaction: discord.Interaction, message_id: str):
@@ -1783,7 +1818,7 @@ class Admin(commands.Cog):
         )
 
     @queue.command(
-        name="moderate",
+        name=command_name("moderate"),
         description="Reject or remove an eligible submission; moderators may use this.",
     )
     @app_commands.choices(
@@ -1852,7 +1887,9 @@ class Admin(commands.Cog):
             raise ValueError("relay_not_found")
         return story
 
-    @relay.command(name="create", description="새 릴레이 이야기를 만듭니다.")
+    @relay.command(
+        name=command_name("create"), description="새 릴레이 이야기를 만듭니다."
+    )
     async def relay_create(
         self,
         interaction: discord.Interaction,
@@ -1899,7 +1936,9 @@ class Admin(commands.Cog):
             ephemeral=True,
         )
 
-    @relay.command(name="list", description="이 서버의 릴레이 이야기를 표시합니다.")
+    @relay.command(
+        name=command_name("list"), description="이 서버의 릴레이 이야기를 표시합니다."
+    )
     async def relay_list(self, interaction: discord.Interaction):
         assert interaction.guild is not None
         rows = await self.bot.db.fetch(
@@ -1924,7 +1963,9 @@ class Admin(commands.Cog):
         )
         await interaction.response.send_message(rendered, ephemeral=True)
 
-    @relay.command(name="view", description="릴레이 이야기 설정과 상태를 확인합니다.")
+    @relay.command(
+        name=command_name("view"), description="릴레이 이야기 설정과 상태를 확인합니다."
+    )
     async def relay_view(self, interaction: discord.Interaction, story_id: int):
         assert interaction.guild is not None
         try:
@@ -1968,7 +2009,8 @@ class Admin(commands.Cog):
         )
 
     @relay.command(
-        name="edit", description="릴레이 이야기 이름, 채널 또는 규칙을 변경합니다."
+        name=command_name("edit"),
+        description="릴레이 이야기 이름, 채널 또는 규칙을 변경합니다.",
     )
     async def relay_edit(
         self,
@@ -2000,7 +2042,7 @@ class Admin(commands.Cog):
 
             async def apply():
                 await self.bot.get_cog("RelayStoryService").validate_story_channel(
-                    interaction.guild.id, channel.id
+                    interaction.guild.id, channel.id, exclude_story_id=story_id
                 )
                 await self.bot.db.execute(
                     "UPDATE relay_stories SET display_name=COALESCE($2,display_name),channel_id=$3,rules_text=COALESCE($4,rules_text),config_version=config_version+1,updated_at=NOW() WHERE id=$1",
@@ -2043,7 +2085,8 @@ class Admin(commands.Cog):
         )
 
     @relay.command(
-        name="pin-rules", description="관리자가 제공한 이야기 규칙을 채널에 고정합니다."
+        name=command_name("pin-rules"),
+        description="관리자가 제공한 이야기 규칙을 채널에 고정합니다.",
     )
     async def relay_pin_rules(self, interaction: discord.Interaction, story_id: int):
         assert interaction.guild is not None
@@ -2073,7 +2116,7 @@ class Admin(commands.Cog):
         )
 
     @relay.command(
-        name="configure-posting",
+        name=command_name("configure-posting"),
         description="기여 순서와 선택적 글자 수 제한을 설정합니다.",
     )
     async def relay_configure_posting(
@@ -2126,7 +2169,8 @@ class Admin(commands.Cog):
         )
 
     @relay.command(
-        name="set-moderators", description="이 이야기 전용 운영진 정책을 설정합니다."
+        name=command_name("set-moderators"),
+        description="이 이야기 전용 운영진 정책을 설정합니다.",
     )
     @app_commands.choices(
         policy=[
@@ -2184,7 +2228,9 @@ class Admin(commands.Cog):
             ephemeral=True,
         )
 
-    @relay.command(name="pause", description="릴레이 이야기를 일시 정지합니다.")
+    @relay.command(
+        name=command_name("pause"), description="릴레이 이야기를 일시 정지합니다."
+    )
     async def relay_pause(self, interaction: discord.Interaction, story_id: int):
         assert interaction.guild is not None
         try:
@@ -2207,7 +2253,9 @@ class Admin(commands.Cog):
             ephemeral=True,
         )
 
-    @relay.command(name="resume", description="릴레이 이야기를 다시 시작합니다.")
+    @relay.command(
+        name=command_name("resume"), description="릴레이 이야기를 다시 시작합니다."
+    )
     async def relay_resume(self, interaction: discord.Interaction, story_id: int):
         assert interaction.guild is not None
         try:
@@ -2235,7 +2283,7 @@ class Admin(commands.Cog):
         )
 
     @relay.command(
-        name="remove",
+        name=command_name("remove"),
         description="릴레이 이야기를 보관 처리합니다. 기여 기록은 삭제하지 않습니다.",
     )
     async def relay_remove(self, interaction: discord.Interaction, story_id: int):
@@ -2270,7 +2318,8 @@ class Admin(commands.Cog):
         )
 
     @relay.command(
-        name="moderate", description="릴레이 기여를 삭제하고 부적격 처리합니다."
+        name=command_name("moderate"),
+        description="릴레이 기여를 삭제하고 부적격 처리합니다.",
     )
     async def relay_moderate(
         self,
@@ -2327,7 +2376,7 @@ class Admin(commands.Cog):
         )
 
     @diagnostics.command(
-        name="reward",
+        name=command_name("reward"),
         description="Look up an imported notice reward by submission message ID.",
     )
     async def reward_diagnostic(
@@ -2361,7 +2410,7 @@ class Admin(commands.Cog):
         )
 
     @diagnostics.command(
-        name="migration",
+        name=command_name("migration"),
         description="가져온 공지 대기열과 릴레이 이야기 상태를 확인합니다.",
     )
     async def migration_diagnostic(self, interaction: discord.Interaction):

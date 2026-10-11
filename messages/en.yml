@@ -6,16 +6,16 @@ game.help: |
   Production resets daily at 05:00 KST.
 
   **Commands**
-  `/게임 현황` — View shards, story essence, organisms, and secrets.
-  `/게임 생산` — Run today's organism production (once per day).
-  `/게임 합성 <비밀> <수량>` — Synthesize a selected secret with shards.
-  `/게임 최대합성` — Synthesize as much as possible in the configured priority order.
-  `/게임 가격` — View synthesis prices and the concentration estimate.
-  `/게임 농축` — Reset run resources for story essence; available once per week.
-  `/게임 도움말` — Show this guide again.
-  `/게임 보상` — View community rewards configured for this server.
+  `/game status` — View shards, story essence, organisms, and secrets.
+  `/game produce` — Run today's organism production (once per day).
+  `/game synthesize <secret> <amount>` — Synthesize a selected secret with shards.
+  `/game max-synthesize` — Synthesize as much as possible in the configured priority order.
+  `/game prices` — View synthesis prices and the concentration estimate.
+  `/game concentrate` — Reset run resources for story essence; available once per week.
+  `/game help` — Show this guide again.
+  `/game rewards` — View community rewards configured for this server.
 
-  A new account can concentrate without community rewards after six `produce → maximum synthesis` cycles and one further production. Community rewards are optional accelerators; use `/게임 보상` to inspect this server's settings.
+  A new account can concentrate without community rewards after six `produce → maximum synthesis` cycles and one further production. Community rewards are optional accelerators; use `/game rewards` to inspect this server's settings.
 game.disabled: "The game is currently disabled in this server."
 game.rewards.none: "No community game rewards are currently configured."
 game.rewards.title: "**Configured community game rewards**"

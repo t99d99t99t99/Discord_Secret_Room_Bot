@@ -70,8 +70,10 @@ class RelayStoryService(commands.Cog):
             rules_text,
         )
 
-    async def validate_story_channel(self, guild_id: int, channel_id: int) -> None:
-        """Ensure a story can be operated before storing its channel ID."""
+    async def validate_story_channel(
+        self, guild_id: int, channel_id: int, *, exclude_story_id: int | None = None
+    ) -> None:
+        """Ensure a story channel is usable and has no other feature owner."""
         channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(
             channel_id
         )
@@ -88,6 +90,23 @@ class RelayStoryService(commands.Cog):
             raise ValueError(
                 "The bot needs view, send, and message-history permissions in the relay story channel."
             )
+        story_owner = await self.bot.db.fetchval(
+            "SELECT id FROM relay_stories WHERE guild_id=$1 AND channel_id=$2 "
+            "AND ($3::BIGINT IS NULL OR id <> $3) LIMIT 1",
+            guild_id,
+            channel_id,
+            exclude_story_id,
+        )
+        if story_owner is not None:
+            raise ValueError("This channel is already used by another relay story.")
+        queue_owner = await self.bot.db.fetchval(
+            "SELECT id FROM notice_queues WHERE guild_id=$1 "
+            "AND (submission_channel_id=$2 OR publication_channel_id=$2) LIMIT 1",
+            guild_id,
+            channel_id,
+        )
+        if queue_owner is not None:
+            raise ValueError("This channel is already used by a notice queue.")
 
     async def legacy_mismatches(self, guild_id: int) -> list[str]:
         """Compare the legacy relay import and its reward evidence."""

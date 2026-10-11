@@ -2,7 +2,7 @@
 
 Essence Foundry is an incremental game. Produce secret organisms for secret
 shards, synthesize secrets, and use **concentration** to turn a completed run
-into story essence. Use `/게임 도움말` for the in-Discord summary.
+into story essence. Use `/game help` for the in-Discord summary.
 
 ## Numbers and initial state
 
@@ -26,7 +26,7 @@ can affect the lower organism in the same production. Red output becomes secret
 shards. The Milky Way size is `server-wide story essence + 1`, and its multiplier
 is `0.2 + 0.035 × ln(Milky Way size)`.
 
-`/게임 합성` spends shards to create a colour or shape secret. The undiscounted
+`/game synthesize` spends shards to create a colour or shape secret. The undiscounted
 next-unit price at current amount `a` is `1.1^(a / 100)`. For a bundle, the bot
 uses the geometric-series sum and then applies:
 
@@ -36,14 +36,14 @@ square cost multiplier = 1 / (1 + ln(1 + square secret) / 17)
 final price = max(1, floor(base price × (1 - catch-up discount) × square multiplier))
 ```
 
-`/게임 최대합성` buys the largest affordable groups using the same rules, in
+`/game max-synthesize` buys the largest affordable groups using the same rules, in
 this priority order:
 
 ```text
 ◯ → □ → ♡ → ⬛️ → ⬜️ → 🟪 → 🟦 → 🟩 → 🟨 → 🟧 → 🟥
 ```
 
-`/게임 가격` is private: it shows every next-unit price, active discounts, and
+`/game prices` is private: it shows every next-unit price, active discounts, and
 the concentration estimate without spending a resource or daily production.
 
 | Secret | Effect |
@@ -72,11 +72,11 @@ when it is accepted, so a preview can change if the player acts in between.
 A new account can reach its first essence without community rewards through six
 `production → maximum synthesis` cycles followed by production and
 concentration. Community queue/relay rewards are optional accelerators and can
-be viewed with `/게임 보상`.
+be viewed with `/game rewards`.
 
 ## Alerts and community rewards
 
-`/게임 알림` is private and stores a per-player choice: off, a concentration
+`/game alerts` is private and stores a per-player choice: off, a concentration
 deadline reminder, or a daily reminder. The chosen hour is KST. A daily reminder
 is sent only if the player has not used a game command that game day; either
 enabled reminder can also send the concentration reminder before its weekly
@@ -86,7 +86,7 @@ are checked at send time, and the game day changes at 05:00 KST.
 
 Queue and relay rewards are configured independently by the server
 administrator; they are not advertised in ordinary feature introductions. Ask
-an administrator about policy or use `/게임 보상` for the currently effective
+an administrator about policy or use `/game rewards` for the currently effective
 rewards. Legacy relay and published daily-trivia rewards apply
 `floor(current secret × 1.05)` to all 11 secrets. A published weekly lesson
 grants one essence at zero balance and otherwise doubles existing essence.

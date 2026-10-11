@@ -27,7 +27,7 @@ from .db import (
 from .numbers import LayeredDecimal as N, format_amount
 from .migration import import_legacy_game_to_guild
 from ..game_config import game_enabled, reward_policy_label
-from ..localization import interaction_locale, text
+from ..localization import command_name, interaction_locale, text
 
 
 def _status_view(state, locale="ko"):
@@ -252,7 +252,9 @@ def _game_help_text(template, game_name):
 class SecretaeIncremental(commands.Cog):
     """Discord command group for the guild-scoped incremental game."""
 
-    game = app_commands.Group(name="게임", description="이 서버의 증분 게임")
+    game = app_commands.Group(
+        name=command_name("game"), description="이 서버의 증분 게임"
+    )
 
     def __init__(self, bot):
         """Store the bot reference used by command and alert handlers."""
@@ -358,7 +360,9 @@ class SecretaeIncremental(commands.Cog):
         else:
             await interaction.response.send_message(str(error), ephemeral=True)
 
-    @game.command(name="도움말", description="이 서버의 게임 안내를 봅니다.")
+    @game.command(
+        name=command_name("help"), description="이 서버의 게임 안내를 봅니다."
+    )
     async def help(self, interaction: discord.Interaction):
         """저장된 게임 안내를 호출자에게만 보여 줍니다."""
         settings = await self.bot.db.fetchrow(
@@ -376,7 +380,8 @@ class SecretaeIncremental(commands.Cog):
         )
 
     @game.command(
-        name="보상", description="이 서버의 공지·릴레이 게임 보상을 확인합니다."
+        name=command_name("rewards"),
+        description="이 서버의 공지·릴레이 게임 보상을 확인합니다.",
     )
     async def rewards(self, interaction: discord.Interaction):
         """Show configured community rewards only when a member explicitly asks."""
@@ -412,7 +417,7 @@ class SecretaeIncremental(commands.Cog):
         )
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
-    @game.command(name="알림", description="게임 알림을 설정합니다.")
+    @game.command(name=command_name("alerts"), description="게임 알림을 설정합니다.")
     async def alert(self, interaction: discord.Interaction):
         """호출자 전용 알림 유형 및 KST 시각 선택 절차를 엽니다."""
         await interaction.response.send_message(
@@ -426,7 +431,7 @@ class SecretaeIncremental(commands.Cog):
             ),
         )
 
-    @game.command(name="현황", description="현재 게임 현황을 봅니다.")
+    @game.command(name=command_name("status"), description="현재 게임 현황을 봅니다.")
     async def status(self, interaction: discord.Interaction):
         """호출자의 현재 게임 자원을 보여 줍니다."""
         state = await get_status(self.bot.db, interaction.guild.id, interaction.user.id)
@@ -447,7 +452,10 @@ class SecretaeIncremental(commands.Cog):
             )
             await acknowledge_migration_report(self.bot.db, interaction.user.id)
 
-    @game.command(name="생산", description="오늘의 비밀 유기체 생산을 실행합니다.")
+    @game.command(
+        name=command_name("produce"),
+        description="오늘의 비밀 유기체 생산을 실행합니다.",
+    )
     async def production(self, interaction: discord.Interaction):
         """하루 생산을 한 번 실행합니다."""
         try:
@@ -460,7 +468,9 @@ class SecretaeIncremental(commands.Cog):
         except ValueError as error:
             await self._error(interaction, error)
 
-    @game.command(name="합성", description="비밀 파편으로 비밀을 합성합니다.")
+    @game.command(
+        name=command_name("synthesize"), description="비밀 파편으로 비밀을 합성합니다."
+    )
     @app_commands.describe(secret="비밀 기호 또는 이름", amount="합성할 수량")
     async def synthesis(
         self, interaction: discord.Interaction, secret: str, amount: str
@@ -483,7 +493,9 @@ class SecretaeIncremental(commands.Cog):
         except ValueError as error:
             await self._error(interaction, error)
 
-    @game.command(name="가격", description="현재 비밀 합성 가격을 확인합니다.")
+    @game.command(
+        name=command_name("prices"), description="현재 비밀 합성 가격을 확인합니다."
+    )
     async def price(self, interaction: discord.Interaction):
         """게임 상태를 바꾸지 않고 모든 비밀의 한 개당 합성 가격을 보여 줍니다."""
         state = await get_status(self.bot.db, interaction.guild.id, interaction.user.id)
@@ -501,7 +513,8 @@ class SecretaeIncremental(commands.Cog):
             )
 
     @game.command(
-        name="최대합성", description="우선순위에 따라 가능한 비밀을 최대 합성합니다."
+        name=command_name("max-synthesize"),
+        description="우선순위에 따라 가능한 비밀을 최대 합성합니다.",
     )
     async def maximum_synthesis(self, interaction: discord.Interaction):
         """비밀 우선순위에 따라 파편을 가능한 만큼 사용합니다."""
@@ -533,7 +546,10 @@ class SecretaeIncremental(commands.Cog):
         except ValueError as error:
             await self._error(interaction, error)
 
-    @game.command(name="농축", description="초기화하고 이야기의 정수를 얻습니다.")
+    @game.command(
+        name=command_name("concentrate"),
+        description="초기화하고 이야기의 정수를 얻습니다.",
+    )
     async def concentration(self, interaction: discord.Interaction):
         """개인용 농축 확인창을 보여 줍니다."""
         state = await get_status(self.bot.db, interaction.guild.id, interaction.user.id)
