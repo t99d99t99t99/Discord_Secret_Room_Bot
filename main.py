@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 import discord
@@ -8,11 +9,15 @@ from db import init_pool
 from cogs.secretae_incremental.migration import run_pending_migrations
 from cogs.localization import CommandTranslator
 
+logger = logging.getLogger(__name__)
+
 
 async def main():
     """Build infrastructure before loading cogs that depend on it."""
     load_dotenv()
     token = os.getenv("DISCORD_TOKEN")
+    if not token:
+        raise RuntimeError("DISCORD_TOKEN is required to start the bot")
 
     intents = discord.Intents.default()
     intents.message_content = True
@@ -32,8 +37,13 @@ async def main():
     await bot.load_extension("cogs.relay_stories")
     await bot.load_extension("cogs.secretae_incremental.game")
     async with bot:
+        logger.info("Starting Discord bot connection")
         await bot.start(token)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     asyncio.run(main())

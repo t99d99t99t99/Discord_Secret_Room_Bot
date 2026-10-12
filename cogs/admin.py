@@ -9,6 +9,8 @@ mechanics live in :mod:`cogs.admin_support` instead.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+import logging
+import os
 
 import discord
 from discord import app_commands
@@ -18,6 +20,8 @@ from .secretae_incremental.db import get_submission_reward
 from .game_config import REWARD_TYPES, reward_policy, reward_policy_label
 from .localization import command_name, guild_locale, interaction_locale, text
 from .admin_support import ConfirmationView, guild_settings as _settings
+
+logger = logging.getLogger(__name__)
 
 
 class Admin(commands.Cog):
@@ -67,7 +71,25 @@ class Admin(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         if not self._synced:
-            await self.bot.tree.sync()
+            # The legacy bot registered copied commands directly to its
+            # configured guild. Global sync does not remove those guild-only
+            # registrations, so replace them with this branch's current tree.
+            legacy_guild_id = os.getenv("SECRET_ROOM_SERVER_ID")
+            if legacy_guild_id and legacy_guild_id.isdecimal():
+                guild = discord.Object(id=int(legacy_guild_id))
+                self.bot.tree.clear_commands(guild=guild)
+                self.bot.tree.copy_global_to(guild=guild)
+                guild_commands = await self.bot.tree.sync(guild=guild)
+                logger.info(
+                    "Synchronized %d commands to configured legacy guild %s",
+                    len(guild_commands),
+                    legacy_guild_id,
+                )
+
+            global_commands = await self.bot.tree.sync()
+            logger.info(
+                "Synchronized %d global application commands", len(global_commands)
+            )
             self._synced = True
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
