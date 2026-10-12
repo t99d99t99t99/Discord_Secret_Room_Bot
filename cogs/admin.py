@@ -78,11 +78,9 @@ class Admin(commands.Cog):
             if legacy_guild_id and legacy_guild_id.isdecimal():
                 guild = discord.Object(id=int(legacy_guild_id))
                 self.bot.tree.clear_commands(guild=guild)
-                self.bot.tree.copy_global_to(guild=guild)
-                guild_commands = await self.bot.tree.sync(guild=guild)
+                await self.bot.tree.sync(guild=guild)
                 logger.info(
-                    "Synchronized %d commands to configured legacy guild %s",
-                    len(guild_commands),
+                    "Cleared stale guild-specific commands from configured legacy guild %s",
                     legacy_guild_id,
                 )
 
