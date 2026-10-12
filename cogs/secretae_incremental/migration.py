@@ -8,6 +8,7 @@ from .constants import COLORS, SECRETS, SHAPES
 from .numbers import LayeredDecimal as N, maximum
 
 MIGRATION_KEY = "legacy-secretae-v1"
+GUILD_SCOPE_MIGRATION_KEY = "legacy-secretae-guild-scope-v1"
 
 
 def _valid_nonnegative_int(value, fallback):
@@ -235,31 +236,36 @@ async def import_legacy_game_to_guild(pool, guild_id: int):
             players = await conn.execute(
                 """INSERT INTO guild_game_players(guild_id,discord_id,shards,essence,last_produced_game_date,last_concentrated_week_start,last_game_command_game_date,created_at,updated_at)
                    SELECT $1,discord_id,shards,essence,last_produced_game_date,last_concentrated_week_start,last_game_command_game_date,created_at,updated_at FROM si_players
-                   ON CONFLICT(guild_id,discord_id) DO NOTHING""",
+                   ON CONFLICT(guild_id,discord_id) DO UPDATE SET
+                       shards=EXCLUDED.shards, essence=EXCLUDED.essence,
+                       last_produced_game_date=EXCLUDED.last_produced_game_date,
+                       last_concentrated_week_start=EXCLUDED.last_concentrated_week_start,
+                       last_game_command_game_date=EXCLUDED.last_game_command_game_date,
+                       created_at=EXCLUDED.created_at, updated_at=EXCLUDED.updated_at""",
                 guild_id,
             )
             await conn.execute(
-                "INSERT INTO guild_game_secrets(guild_id,discord_id,amounts) SELECT $1,discord_id,amounts FROM si_secrets ON CONFLICT(guild_id,discord_id) DO NOTHING",
+                "INSERT INTO guild_game_secrets(guild_id,discord_id,amounts) SELECT $1,discord_id,amounts FROM si_secrets ON CONFLICT(guild_id,discord_id) DO UPDATE SET amounts=EXCLUDED.amounts",
                 guild_id,
             )
             await conn.execute(
-                "INSERT INTO guild_game_organics(guild_id,discord_id,amounts) SELECT $1,discord_id,amounts FROM si_organics ON CONFLICT(guild_id,discord_id) DO NOTHING",
+                "INSERT INTO guild_game_organics(guild_id,discord_id,amounts) SELECT $1,discord_id,amounts FROM si_organics ON CONFLICT(guild_id,discord_id) DO UPDATE SET amounts=EXCLUDED.amounts",
                 guild_id,
             )
             await conn.execute(
-                "INSERT INTO guild_game_world_state(guild_id,total_essence,highest_essence) SELECT $1,total_essence,highest_essence FROM si_world_state WHERE singleton=TRUE ON CONFLICT(guild_id) DO NOTHING",
+                "INSERT INTO guild_game_world_state(guild_id,total_essence,highest_essence) SELECT $1,total_essence,highest_essence FROM si_world_state WHERE singleton=TRUE ON CONFLICT(guild_id) DO UPDATE SET total_essence=EXCLUDED.total_essence,highest_essence=EXCLUDED.highest_essence,updated_at=NOW()",
                 guild_id,
             )
             await conn.execute(
-                "INSERT INTO guild_game_alert_settings(guild_id,discord_id,alert_type,alert_hour,updated_at) SELECT $1,discord_id,alert_type,alert_hour,updated_at FROM si_alert_settings ON CONFLICT(guild_id,discord_id) DO NOTHING",
+                "INSERT INTO guild_game_alert_settings(guild_id,discord_id,alert_type,alert_hour,updated_at) SELECT $1,discord_id,alert_type,alert_hour,updated_at FROM si_alert_settings ON CONFLICT(guild_id,discord_id) DO UPDATE SET alert_type=EXCLUDED.alert_type,alert_hour=EXCLUDED.alert_hour,updated_at=EXCLUDED.updated_at",
                 guild_id,
             )
             await conn.execute(
-                "INSERT INTO guild_game_relay_rewards(guild_id,message_id,discord_id,details,awarded_at) SELECT $1,message_id,discord_id,details,awarded_at FROM si_relay_rewards ON CONFLICT(guild_id,message_id) DO NOTHING",
+                "INSERT INTO guild_game_relay_rewards(guild_id,message_id,discord_id,details,awarded_at) SELECT $1,message_id,discord_id,details,awarded_at FROM si_relay_rewards ON CONFLICT(guild_id,message_id) DO UPDATE SET discord_id=EXCLUDED.discord_id,details=EXCLUDED.details,awarded_at=EXCLUDED.awarded_at",
                 guild_id,
             )
             await conn.execute(
-                "INSERT INTO guild_game_relay_turn_state(guild_id,last_rewarded_discord_id,updated_at) SELECT $1,last_rewarded_discord_id,updated_at FROM si_relay_turn_state WHERE singleton=TRUE ON CONFLICT(guild_id) DO NOTHING",
+                "INSERT INTO guild_game_relay_turn_state(guild_id,last_rewarded_discord_id,updated_at) SELECT $1,last_rewarded_discord_id,updated_at FROM si_relay_turn_state WHERE singleton=TRUE ON CONFLICT(guild_id) DO UPDATE SET last_rewarded_discord_id=EXCLUDED.last_rewarded_discord_id,updated_at=EXCLUDED.updated_at",
                 guild_id,
             )
             scoped_counts = {

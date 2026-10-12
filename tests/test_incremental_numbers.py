@@ -15,7 +15,10 @@ from cogs.secretae_incremental.numbers import (
     format_amount,
     maximum,
 )
-from cogs.secretae_incremental.migration import _valid_nonnegative_int
+from cogs.secretae_incremental.migration import (
+    _valid_nonnegative_int,
+    import_legacy_game_to_guild,
+)
 from cogs.secretae_incremental import db as incremental_db
 
 
@@ -191,3 +194,48 @@ class PendingRewardTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(summary, {"awarded": 0, "already_awarded": 1, "failed": []})
         mark.assert_awaited_once_with(pool, "kyohoon", 3)
+
+
+class GameGuildMigrationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_import_uses_a_stable_guild_migration_key(self):
+        class AsyncContext:
+            def __init__(self, value):
+                self.value = value
+
+            async def __aenter__(self):
+                return self.value
+
+            async def __aexit__(self, *exc_info):
+                return False
+
+        conn = unittest.mock.Mock()
+        conn.transaction = unittest.mock.Mock(return_value=AsyncContext(None))
+        conn.execute = AsyncMock(return_value="INSERT 0 2")
+        conn.fetchval = AsyncMock(
+            side_effect=[
+                None,
+                "source-checksum",
+                2,
+                2,
+                2,
+                0,
+                0,
+                2,
+                2,
+                2,
+                0,
+                0,
+            ]
+        )
+        world = {"total_essence": {"sign": 1}, "highest_essence": {"sign": 1}}
+        conn.fetchrow = AsyncMock(side_effect=[world, world])
+        pool = unittest.mock.Mock()
+        pool.acquire = unittest.mock.Mock(return_value=AsyncContext(conn))
+
+        imported = await import_legacy_game_to_guild(pool, 123)
+
+        self.assertTrue(imported)
+        evidence_call = conn.fetchval.await_args_list[0]
+        self.assertEqual(evidence_call.args[1], "legacy-secretae-guild-scope-v1:123")
+        copied_rows = [call.args[0] for call in conn.execute.await_args_list[1:8]]
+        self.assertTrue(all("DO UPDATE SET" in query for query in copied_rows))
