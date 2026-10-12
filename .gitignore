@@ -2,7 +2,7 @@
 
 .env
 venv/
-local_data/
+.local
 
 **/__pycache__/
 
