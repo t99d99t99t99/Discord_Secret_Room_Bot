@@ -208,7 +208,7 @@ async def initialize_notice_schema(conn) -> None:
                 CHECK(selection_policy IN ('oldest', 'random', 'fair')),
             attribution_policy TEXT NOT NULL DEFAULT 'display_name'
                 CHECK(attribution_policy IN ('display_name', 'none')),
-            title_template TEXT NOT NULL DEFAULT '{{queue_name}} — {{author}}',
+            title_template TEXT NOT NULL DEFAULT '{{YYYY}}년 {{MM}}월 {{DD}}일 {{queue_name}}, {{author}}',
             reward_policy JSONB NOT NULL DEFAULT '{"type":"none"}'::jsonb,
             provenance JSONB NOT NULL DEFAULT '{}'::jsonb,
             config_version INTEGER NOT NULL DEFAULT 1,
@@ -255,8 +255,21 @@ async def initialize_notice_schema(conn) -> None:
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS submission_period_hours INTEGER CHECK(submission_period_hours > 0)",
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS submission_opened_at TIMESTAMPTZ",
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS content_template TEXT NOT NULL DEFAULT '{{content}}'",
+        "ALTER TABLE notice_queues ALTER COLUMN title_template SET DEFAULT '{{YYYY}}년 {{MM}}월 {{DD}}일 {{queue_name}}, {{author}}'",
     ):
         await conn.execute(statement)
+    # Migrate only the old built-in template. Custom titles belong to queue owners.
+    await conn.execute("""
+        UPDATE notice_queues
+        SET title_template = CASE
+            WHEN provenance->>'legacy_kind' = 'tomak'
+                THEN '{{YYYY}}년 {{MM}}월 {{DD}}일 토막상식, {{author}}'
+            WHEN provenance->>'legacy_kind' = 'kyohoon' OR cadence = 'weekly'
+                THEN '{{MM}}월 {{week}}주차, {{author}}'
+            ELSE '{{YYYY}}년 {{MM}}월 {{DD}}일 {{queue_name}}, {{author}}'
+        END
+        WHERE title_template = '{{queue_name}} — {{author}}'
+    """)
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS notice_jobs (
             id BIGSERIAL PRIMARY KEY,

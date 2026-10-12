@@ -36,6 +36,22 @@ def valid_timezone(value: str) -> bool:
         return False
 
 
+def default_title_template(cadence: str) -> str:
+    """Return a useful date-first title for this queue's publication cadence."""
+    if cadence == "weekly":
+        return "{{MM}}월 {{week}}주차, {{author}}"
+    return "{{YYYY}}년 {{MM}}월 {{DD}}일 {{queue_name}}, {{author}}"
+
+
+def sunday_week_of_month(value) -> int:
+    """Return the ordinal Sunday for a date, using the prior Sunday in its week."""
+    most_recent_sunday = value.day - ((value.weekday() + 1) % 7)
+    if most_recent_sunday < 1:
+        # Dates before the month's first Sunday still belong to its first week.
+        return 1
+    return (most_recent_sunday - 1) // 7 + 1
+
+
 class NoticeQueueService(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -109,8 +125,8 @@ class NoticeQueueService(commands.Cog):
             row = await self.bot.db.fetchrow(
                 """INSERT INTO notice_queues(guild_id,queue_key,display_name,state,accepting_submissions,
                    submission_channel_id,publication_channel_id,cadence,schedule_weekday,schedule_time,timezone,
-                   selection_policy,per_member_limit,reward_policy,provenance)
-                   VALUES($1,$2,$3,$4,TRUE,$5,$6,$7,$8,$9,'Asia/Seoul',$10,$11,$12,$13)
+                   selection_policy,per_member_limit,reward_policy,provenance,title_template)
+                   VALUES($1,$2,$3,$4,TRUE,$5,$6,$7,$8,$9,'Asia/Seoul',$10,$11,$12,$13,$14)
                    ON CONFLICT(guild_id,queue_key) DO UPDATE SET updated_at=NOW()
                    RETURNING id""",
                 int(guild_id),
@@ -126,6 +142,11 @@ class NoticeQueueService(commands.Cog):
                 limit,
                 reward,
                 {"migration_key": "legacy-notice-queues-v1", "legacy_kind": key},
+                (
+                    "{{YYYY}}년 {{MM}}월 {{DD}}일 토막상식, {{author}}"
+                    if key == "tomak"
+                    else "{{MM}}월 {{week}}주차, {{author}}"
+                ),
             )
             # Adopt the currently open bot-owned submission thread so the
             # generalized listener continues accepting entries immediately.
@@ -227,8 +248,8 @@ class NoticeQueueService(commands.Cog):
         key = "queue-" + name.lower().replace(" ", "-")[:40]
         return await self.bot.db.fetchrow(
             """INSERT INTO notice_queues(guild_id,queue_key,display_name,description,state,accepting_submissions,
-               submission_channel_id,publication_channel_id,cadence,schedule_time,schedule_weekday,timezone)
-               VALUES($1,$2,$3,$4,'active',TRUE,$5,$6,$7,$8,$9,$10) RETURNING *""",
+               submission_channel_id,publication_channel_id,cadence,schedule_time,schedule_weekday,timezone,title_template)
+               VALUES($1,$2,$3,$4,'active',TRUE,$5,$6,$7,$8,$9,$10,$11) RETURNING *""",
             guild_id,
             key,
             name,
@@ -239,6 +260,7 @@ class NoticeQueueService(commands.Cog):
             schedule_time,
             weekday,
             timezone_name,
+            default_title_template(cadence),
         )
 
     async def _validate_channel(
@@ -570,8 +592,9 @@ class NoticeQueueService(commands.Cog):
                 if queue["attribution_policy"] == "display_name"
                 else ""
             )
+            published_at = datetime.now(timezone.utc)
             title, content = self._render_publication(
-                queue, author, source_message.content
+                queue, author, source_message.content, published_at
             )
             files = [
                 await attachment.to_file() for attachment in source_message.attachments
@@ -586,7 +609,7 @@ class NoticeQueueService(commands.Cog):
             for content_chunk in content_chunks[1:]:
                 await publication.send(content_chunk)
             await self.bot.db.execute(
-                "UPDATE notice_submissions SET status='published',published_at=NOW(),publication_channel_id=$2,publication_thread_id=$3,reward_state=$4 WHERE id=$1",
+                "UPDATE notice_submissions SET status='published',published_at=$5,publication_channel_id=$2,publication_thread_id=$3,reward_state=$4 WHERE id=$1",
                 submission["id"],
                 destination.id,
                 publication.id,
@@ -595,6 +618,7 @@ class NoticeQueueService(commands.Cog):
                     if queue["reward_policy"].get("type") != "none"
                     else "not_applicable"
                 ),
+                published_at,
             )
             await self._issue_legacy_reward(
                 queue, submission, source_message, publication
@@ -727,16 +751,31 @@ class NoticeQueueService(commands.Cog):
         )
 
     @staticmethod
-    def _render_publication(queue, author: str, source_content: str) -> tuple[str, str]:
+    def _render_publication(
+        queue, author: str, source_content: str, published_at=None
+    ) -> tuple[str, str]:
+        """Expand queue, contributor, content, and publication-date tokens."""
+        published_at = published_at or datetime.now(timezone.utc)
+        local_date = published_at.astimezone(
+            ZoneInfo(queue["timezone"] if "timezone" in queue else "UTC")
+        ).date()
         values = {
             "{{queue_name}}": queue["display_name"],
             "{{author}}": author,
             "{{content}}": source_content,
+            "{{YYYY}}": f"{local_date.year:04d}",
+            "{{YY}}": f"{local_date.year % 100:02d}",
+            "{{MM}}": f"{local_date.month:02d}",
+            "{{M}}": str(local_date.month),
+            "{{DD}}": f"{local_date.day:02d}",
+            "{{D}}": str(local_date.day),
+            "{{week}}": str(sunday_week_of_month(local_date)),
         }
         title, content = queue["title_template"], queue["content_template"]
         for token, value in values.items():
             title, content = title.replace(token, value), content.replace(token, value)
-        return title.strip(" —"), content
+        title = title.strip(" —").rstrip(" ,—–-")
+        return title, content
 
     @tasks.loop(seconds=60)
     async def run_schedules(self):

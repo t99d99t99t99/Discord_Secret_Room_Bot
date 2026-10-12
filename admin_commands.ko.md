@@ -1,31 +1,338 @@
 # CommunityNoticeBot 관리자 명령어 참고
 
-관리 작업은 답장 전용 `!moderate`를 제외하고 `/admin` 슬래시 명령으로 수행합니다.
-서버 소유자, **서버 관리** 권한 보유자, 또는 `/admin setup set-admin-role`로 지정한 역할이
-실행할 수 있습니다. 권한 거부는 비공개로 표시됩니다.
+이 문서는 모든 `/admin` 명령의 인수, 허용값 및 동작을 설명합니다. 한국어
+Discord 클라이언트에서는 `/admin`이 `/관리`처럼 현지화되어 보일 수 있지만,
+명령 구조와 인수의 의미는 같습니다.
 
-| 명령 | 설명 |
-| --- | --- |
-| `/admin setup start`, `status` | 안내형 설정을 시작하거나 현재 구성과 비활성 선택 기능을 확인합니다. |
-| `/admin setup set-language` | 서버 기본 언어를 영어 또는 한국어로 선택합니다. |
-| `/admin setup set-admin-role`, `set-audit-channel`, `set-moderators` | 관리자 역할, 감사 대상, 검수 권한 정책을 설정합니다. |
-| `/admin queue create`, `list`, `view` | 일일·주간·수동 공지 대기열을 만들고 상태를 확인합니다. |
-| `/admin queue edit`, `configure`, `set-channels`, `configure-submissions` | 표시 이름, 일정, 채널, 신청 규칙을 변경합니다. |
-| `/admin queue open-submissions`, `pause`, `resume`, `archive` | 신청 스레드를 열거나 대기열 수명주기를 변경합니다. |
-| `/admin queue publish-now`, `retry`, `moderate` | 즉시 게시, 중단 작업 재시도, 신청 검수를 수행합니다. |
-| `/admin relay create`, `list`, `view`, `edit`, `configure-posting` | 독립 릴레이 이야기를 만들고 채널·규칙을 관리합니다. |
-| `/admin relay pin-rules`, `pause`, `resume`, `remove`, `moderate` | 규칙 고정, 수명주기 관리, 기여 검수를 수행합니다. |
-| `/admin game status`, `enable`, `disable`, `set-name` | 선택 게임의 상태·이름을 관리하며 진행도는 유지합니다. |
-| `/admin game reward-policy`, `reward-review`, `reward-rollback` | 기능별 보상 정책을 설정·검토하고 지원되는 스냅샷을 복구합니다. |
-| `/admin game reward-reconciliations`, `resolve-reconciliation` | 삭제·부적격 기여의 보상 조정 기록을 검토·완료합니다. |
-| `/admin diagnostics migration`, `reward` | 마이그레이션 증적 또는 제출 메시지의 보상 기록을 확인합니다. |
+서버 소유자, **서버 관리** 권한 보유자, `/admin setup set-admin-role`로
+지정한 역할이 관리자 명령을 사용할 수 있습니다. 검수 권한은 설정에 따라
+공지 신청과 릴레이 이야기별로 위임할 수 있습니다. 권한 거부와 대부분의
+응답은 명령을 실행한 사람에게만 표시됩니다.
 
-일정 변경, 즉시 게시, 보상 재시도, 전체 복구에는 확인 버튼이 필요합니다. 모든 구성 및 운영 변경은
-감사 로그에 남고, 감사 대상이 설정되어 있으면 그곳에도 알림을 보냅니다.
+## 서버 설정
+
+### `/admin setup start`
+
+인수가 없습니다. 안내형 설정을 시작하거나 이어서 진행하고, 서버의 Discord
+기본 언어가 `ko`로 시작하면 한국어, 그 외에는 영어를 기본 언어로 설정합니다.
+공지 대기열을 만들거나 선택 기능을 활성화하지는 않습니다.
+
+### `/admin setup status`
+
+인수가 없습니다. 설정 진행 상태, 서버 언어, 검수 정책, 게임 활성화 여부,
+관리자 역할 또는 감사 채널이 빠졌는지를 표시합니다.
+
+### `/admin setup set-language`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `locale` | 예 | `English` (`en`) 또는 `한국어` (`ko`)를 선택합니다. 봇 응답의 서버 기본 언어를 설정합니다. |
+
+### `/admin setup set-admin-role`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `role` | 아니요 | 봇 관리자 권한을 부여할 이 서버의 역할입니다. 생략하면 설정된 역할을 제거합니다. 서버 소유자와 서버 관리 권한 보유자는 계속 관리자입니다. |
+
+### `/admin setup set-audit-channel`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `channel` | 아니요 | 감사 알림을 보낼 이 서버의 텍스트 채널 또는 스레드입니다. 생략하면 감사 대상을 해제합니다. 설정을 저장해도 봇의 권한 부족으로 메시지를 보내지 못할 수 있습니다. |
+
+### `/admin setup set-moderators`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `policy` | 예 | `Disabled` (`disabled`), `Manage Messages permission` (`manage_messages`), `One role` (`role`) 중 하나입니다. 공지 신청과 릴레이 기여를 검수할 사람을 정합니다. |
+| `role` | 아니요 | `policy`가 `One role`이면 필수입니다. 검수 권한을 위임할 서버 역할을 선택합니다. 다른 정책을 선택하면 역할 설정은 해제됩니다. |
+
+## 공지 대기열
+
+대기열 ID는 `/admin queue list`에서 확인합니다. 변경할 대기열의 ID를
+사용하세요. 채널은 이 서버에 속해야 하며 신청 채널과 게시 채널은 서로
+달라야 합니다. 다른 대기열이나 릴레이 이야기가 사용 중인 채널은 지정할 수
+없습니다. 대기열 채널에서는 봇에 채널 보기, 메시지 보내기, 기록 보기,
+공개 스레드 만들기 권한이 필요합니다. 릴레이 이야기 채널에서는 채널 보기,
+메시지 보내기, 기록 보기 권한이 필요합니다.
+
+### `/admin queue create`
+
+활성 대기열을 만듭니다. 신청을 받으려면 이후
+`/admin queue open-submissions`를 실행해야 합니다.
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `name` | 예 | 대기열에 표시할 이름입니다. 내부 대기열 키 생성에도 사용됩니다. |
+| `submission_channel` | 예 | 구성원이 신청을 게시하고 신청 스레드를 여는 텍스트 채널입니다. |
+| `publication_channel` | 예 | 선택된 신청을 게시할 별도의 텍스트 채널입니다. |
+| `cadence` | 아니요 | `Daily` (`daily`), `Weekly` (`weekly`), `Manual only` (`manual`) 중 하나입니다. 기본값은 매일입니다. 수동 대기열은 스케줄러가 게시하지 않으며 `/admin queue publish-now`로 게시합니다. |
+| `schedule_time` | 아니요 | 현지 시간 기준 24시간제 `HH:MM` 형식입니다. 예: `09:30`. 기본값은 `09:00`입니다. 매일/매주 대기열에 적용됩니다. |
+| `timezone_name` | 아니요 | `Asia/Seoul`, `America/New_York` 같은 IANA 시간대 이름입니다. 기본값은 `UTC`입니다. |
+| `weekday` | 아니요 | 주간 대기열의 요일입니다. 정수 `0`(월요일)부터 `6`(일요일)까지 입력하며, 주간 대기열에서는 필수입니다. |
+| `description` | 아니요 | 대기열을 설명하는 선택 문구입니다. |
+
+### `/admin queue list`
+
+인수가 없습니다. 대기열 ID, 이름, 상태, 신청 접수 여부 및 반복 주기를
+표시합니다.
+
+### `/admin queue view`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `queue_id` | 예 | `/admin queue list`에 표시된 정수 ID입니다. 일정, 채널, 신청 기간, 선택 정책, 보상 정책, 게시 템플릿, 적격 신청 수와 최근 게시 상태를 표시합니다. |
+
+### `/admin queue edit`
+
+변경할 선택 인수를 하나 이상 입력합니다. 생략한 값은 기존 설정을
+유지합니다.
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `queue_id` | 예 | `/admin queue list`에 표시된 정수 ID입니다. |
+| `name` | 아니요 | 새 표시 이름입니다. |
+| `description` | 아니요 | 새 설명입니다. |
+| `accepting` | 아니요 | `true`이면 현재 열린 스레드에서 신청을 받으며, `false`이면 신청을 닫습니다. 새 스레드를 만들지는 않습니다. |
+
+### `/admin queue configure`
+
+바꿀 설정만 입력합니다. 생략한 설정은 기존 값을 유지합니다. 주간 대기열의
+`weekday`는 월요일 `0`부터 일요일 `6`까지입니다.
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `queue_id` | 예 | `/admin queue list`에 표시된 정수 ID입니다. |
+| `selection` | 아니요 | `Oldest eligible` (`oldest`), `Fair rotation` (`fair`), `Random` (`random`) 중 하나입니다. 게시할 적격 신청을 선택하는 방식을 정합니다. |
+| `per_member_limit` | 아니요 | `1` 이상의 정수입니다. 한 신청 기간 동안 구성원 한 명이 제출할 수 있는 적격 신청 수의 상한입니다. |
+| `schedule_time` | 아니요 | 현지 시간 기준 `HH:MM` 형식의 24시간제 시각입니다. 예: `18:05`. |
+| `timezone_name` | 아니요 | `Asia/Seoul` 같은 유효한 IANA 시간대 이름입니다. |
+| `weekday` | 아니요 | 월요일 `0`부터 일요일 `6`까지의 정수입니다. 주간 대기열에 적용됩니다. |
+| `attribution` | 아니요 | `Display name` (`display_name`)은 기여자의 표시 이름을 게시하고, `No attribution` (`none`)은 표시하지 않습니다. |
+| `title_template` | 아니요 | 비어 있지 않은 게시 제목이며 최대 100자입니다. 새 일간/수동 대기열의 기본값은 `{{YYYY}}년 {{MM}}월 {{DD}}일 {{queue_name}}, {{author}}`, 주간 대기열은 `{{MM}}월 {{week}}주차, {{author}}`입니다. 날짜 변수는 대기열의 `timezone` 기준 게시 날짜를 사용합니다. `{{YYYY}}`는 네 자리 연도, `{{YY}}`는 두 자리 연도, `{{MM}}`은 0을 채운 월, `{{M}}`은 0을 채우지 않은 월, `{{DD}}`는 0을 채운 일, `{{D}}`는 0을 채우지 않은 일, `{{week}}`는 해당 월의 일요일 순번(1–5)입니다. `{{queue_name}}`은 대기열 표시 이름, `{{author}}`는 기여자 표시 이름(기여자 표시를 끄면 빈 문자열), `{{content}}`는 제출 내용을 넣습니다. |
+| `content_template` | 아니요 | 비어 있지 않은 게시 본문이며 최대 1,900자입니다. 제목과 같은 날짜 및 텍스트 변수를 모두 지원합니다. |
+
+### `/admin queue set-channels`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `queue_id` | 예 | `/admin queue list`에 표시된 정수 ID입니다. |
+| `submission_channel` | 예 | 신청용 이 서버 텍스트 채널입니다. 게시 채널과 달라야 하며 다른 대기열이나 릴레이 이야기가 사용 중이면 안 됩니다. |
+| `publication_channel` | 예 | 게시용 별도의 이 서버 텍스트 채널입니다. 다른 대기열이나 릴레이 이야기가 사용 중이면 안 됩니다. |
+
+변경은 확인을 거칩니다. 확인하면 기존 신청 스레드 연결을 해제하고 신청을
+닫습니다. 새 신청을 받으려면 새 스레드를 열어야 합니다.
+
+### `/admin queue configure-submissions`
+
+생략한 숫자·참/거짓 설정은 기존 값을 유지합니다. `clear_` 스위치를 사용해
+제한을 해제할 수 있으며, 해제 스위치가 같은 명령의 새 숫자보다 우선합니다.
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `queue_id` | 예 | `/admin queue list`에 표시된 정수 ID입니다. |
+| `minimum_characters` | 아니요 | `0` 이상의 정수입니다. 제출 내용의 최소 글자 수입니다. |
+| `maximum_characters` | 아니요 | `0` 이상의 정수이며 적용되는 최소 글자 수보다 작을 수 없습니다. `2,000`자를 넘으면 확인을 요청합니다. |
+| `submission_period_hours` | 아니요 | `1` 이상의 정수입니다. 신청 창이 열려 있는 시간입니다. |
+| `allow_attachments` | 아니요 | `true`는 첨부 허용, `false`는 첨부 거부입니다. |
+| `allow_links` | 아니요 | `true`는 링크 허용, `false`는 링크 거부입니다. |
+| `allow_edits` | 아니요 | `true`는 신청 후 수정 허용, `false`는 수정된 신청을 부적격 처리합니다. |
+| `no_entry_action` | 아니요 | `alert_and_reopen`은 운영진에게 알리고 신청 스레드를 새로 엽니다. `alert_only`는 알림만 보냅니다. `skip`은 예정된 게시를 건너뜁니다. |
+| `clear_content_limits` | 아니요 | 기본값 `false`인 불리언입니다. `true`로 설정하면 최소·최대 글자 수 제한을 모두 해제합니다. |
+| `clear_submission_period` | 아니요 | 기본값 `false`인 불리언입니다. `true`로 설정하면 신청 기간 제한을 해제합니다. |
+
+### `/admin queue open-submissions`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `queue_id` | 예 | `/admin queue list`의 정수 ID입니다. 대기열의 새 신청 스레드를 만들고 신청을 엽니다. |
+
+### `/admin queue pause`, `/admin queue resume`, `/admin queue archive`
+
+세 명령은 같은 인수를 사용합니다.
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `queue_id` | 예 | `/admin queue list`의 정수 ID입니다. `pause`는 기록을 보존하며 예약 작업을 멈춥니다. `resume`은 다시 활성화합니다. `archive`는 기록을 삭제하지 않고 대기열을 종료합니다. |
+
+### `/admin queue publish-now`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `queue_id` | 예 | `/admin queue list`의 정수 ID입니다. 가장 오래된 적격 신청을 즉시 게시합니다. 확인이 필요합니다. |
+
+### `/admin queue retry`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `message_id` | 예 | 원본 신청 메시지의 숫자형 Discord ID입니다. 게시 메시지나 스레드 ID가 아닙니다. 신청 상태가 `selected` 또는 `failed`일 때만 사용할 수 있으며, 해당 신청을 안전하게 다시 시도할 수 있도록 적격 상태로 돌립니다. |
+
+### `/admin queue moderate`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `message_id` | 예 | 적격 상태인 원본 신청의 숫자형 Discord 메시지 ID입니다. |
+| `action` | 예 | `Reject` (`rejected`), `Disqualify` (`invalid`), `Skip` (`invalid`) 중 하나입니다. Reject는 거절 상태로 기록합니다. Disqualify와 Skip은 현재 저장 결과가 같습니다. 둘 다 신청을 부적격 처리해 더 이상 후보가 되지 않게 합니다. |
+| `reason` | 아니요 | 선택한 조치와 함께 저장할 선택 사유입니다. |
+
+## 릴레이 이야기
+
+이야기 ID는 `/admin relay list`에서 확인합니다. 채널은 이 서버에 속해야
+하며, 다른 대기열이나 이야기가 사용 중이면 안 됩니다. 봇에 채널 보기,
+메시지 보내기, 기록 보기, 공개 스레드 만들기 권한이 필요합니다.
+
+### `/admin relay create`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `name` | 예 | 릴레이 이야기의 표시 이름입니다. |
+| `channel` | 예 | 이야기를 진행할 이 서버의 텍스트 채널 또는 스레드입니다. |
+| `rules` | 아니요 | 기여자에게 보여줄 선택 규칙입니다. 규칙 고정 명령에서도 사용합니다. |
+
+### `/admin relay list`
+
+인수가 없습니다. 이야기 ID, 이름, 채널 및 상태를 나열합니다.
+
+### `/admin relay view`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `story_id` | 예 | `/admin relay list`에 표시된 정수 ID입니다. 채널, 상태, 적격 기여 수, 최근 기여자, 규칙, 보상 정책 및 검수 정책을 표시합니다. |
+
+### `/admin relay edit`
+
+변경할 항목만 입력합니다. 생략한 값은 유지됩니다. 채널을 바꾸면 확인을
+요청하며, 새 채널은 릴레이 채널 검증을 통과해야 합니다.
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `story_id` | 예 | `/admin relay list`에 표시된 정수 ID입니다. |
+| `name` | 아니요 | 새 표시 이름입니다. |
+| `channel` | 아니요 | 이 서버의 새 텍스트 채널 또는 스레드입니다. 다른 대기열이나 이야기가 사용 중이면 안 됩니다. |
+| `rules` | 아니요 | 새 이야기 규칙 문구입니다. |
+
+### `/admin relay pin-rules`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `story_id` | 예 | `/admin relay list`의 정수 ID입니다. 설정된 규칙을 이야기 채널에 고정합니다. 먼저 규칙을 설정해야 합니다. |
+
+### `/admin relay configure-posting`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `story_id` | 예 | `/admin relay list`의 정수 ID입니다. |
+| `require_intervening_contributor` | 아니요 | 기본값 `true`인 불리언입니다. `true`이면 같은 사람이 다시 게시하기 전에 다른 사람이 한 번 기여해야 합니다. `false`이면 연속 기여를 허용합니다. |
+| `maximum_characters` | 아니요 | 기여 내용의 최대 길이인 양의 정수입니다. 생략하면 글자 수 제한을 해제합니다. |
+
+### `/admin relay set-moderators`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `story_id` | 예 | `/admin relay list`의 정수 ID입니다. |
+| `policy` | 예 | `inherit`는 서버 검수 설정을 따릅니다. `manage_messages`는 메시지 관리 권한을 요구합니다. `role`은 이 이야기 전용 역할 하나를 사용합니다. |
+| `role` | 아니요 | `role` 정책에서 필수입니다. 이 이야기를 검수할 서버 역할을 선택합니다. 나머지 정책에서는 무시되고 해제됩니다. |
+
+### `/admin relay pause`, `/admin relay resume`, `/admin relay remove`
+
+세 명령은 같은 인수를 사용합니다.
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `story_id` | 예 | `/admin relay list`의 정수 ID입니다. `pause`는 새 활동을 멈춥니다. `resume`은 이야기를 다시 활성화합니다. `remove`는 보관 처리하며 기여 기록을 삭제하지 않습니다. `remove`에는 확인이 필요합니다. |
+
+### `/admin relay moderate`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `message_id` | 예 | 이 서버에서 적격 상태인 기여의 숫자형 Discord 메시지 ID입니다. 봇은 메시지 삭제를 시도하고 기여를 부적격 처리합니다. |
+| `reason` | 아니요 | 검수 및 이로 인해 생성된 보상 조정 사례에 기록할 선택 사유입니다. |
+
+## Essence Foundry 게임 및 커뮤니티 보상
+
+### `/admin game status`
+
+인수가 없습니다. 게임 활성화 여부, 표시 이름, 이 서버에서 공지 대기열이나
+릴레이 이야기에 설정한 보상 정책을 표시합니다.
+
+### `/admin game enable`, `/admin game disable`
+
+인수가 없습니다. 실행하려면 확인이 필요합니다. Enable은 이 서버에서 게임을
+사용할 수 있게 합니다. Disable은 새 게임 행동과 커뮤니티 보상을 중지하지만
+플레이어 진행도는 보존합니다.
+
+### `/admin game set-name`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `name` | 예 | 공백만으로 이루어지지 않은 1–100자 표시 이름입니다. 앞뒤 공백은 제거됩니다. |
+
+### `/admin game reward-policy`
+
+공지 대기열 또는 릴레이 이야기 하나의 보상을 설정합니다. 대상 ID는
+`/admin queue list` 또는 `/admin relay list`에서 확인합니다. 확인 버튼을
+눌러야 새 정책이 적용됩니다.
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `target_type` | 예 | `notice_queue` 또는 `relay_story`입니다. `target_id`가 가리키는 기능 종류를 정합니다. |
+| `target_id` | 예 | 이 서버의 대기열 또는 이야기 정수 ID입니다. |
+| `policy_type` | 예 | `none`, `essence_multiplier`, `each_secret_multiplier`, `production_multiplier`, `fixed_essence` 중 하나입니다. |
+| `amount` | 조건부 | 텍스트로 입력하는 십진수입니다. `none` 외에는 필수입니다. 정수 배율과 각 비밀 배율은 `1.1`–`2`, 생산 배율은 `1`–`3`, 고정 정수는 `0`보다 커야 합니다. |
+| `first_grant_amount` | 아니요 | 정수 배율 또는 고정 정수 정책에서 정수가 0인 구성원의 첫 지급에 사용할 선택 십진수이며 `0`보다 커야 합니다. |
+| `weekly_cap` | 아니요 | 이 대기열 또는 이야기에서 한국 시간 기준 한 주 동안 지급할 수 있는 전체 보상 수의 상한인 정수 `1`–`7`입니다. 수령자별 상한이 아니라 기능별 전체 상한입니다. |
+
+`essence_multiplier`는 수령자의 현재 정수에 배율을 적용합니다. 정수가 0이고
+`first_grant_amount`가 있으면 그 값을 첫 지급량으로 사용합니다.
+`fixed_essence`는 현재 정수에 `amount`를 더합니다. 단, 정수가 0이고
+`first_grant_amount`가 있으면 그 값을 대신 지급합니다.
+`each_secret_multiplier`는 모든 비밀 수량에, `production_multiplier`는 모든
+유기체 생산값에 배율을 적용합니다. `first_grant_amount`는 두 정수 정책에만
+적용됩니다. `policy_type`이 `none`이면 다른 보상량/횟수 인수는 사용하지 않습니다.
+따라서 생산 배율에서 허용되는 `1`을 제외하면 배율 `1`은 `none`을 대신하지 않습니다.
+
+### `/admin game reward-review`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `ledger_id` | 예 | 대기 조정 사례 또는 배포 환경의 보상/감사 기록에서 찾는 정수 보상 원장 ID입니다. 수령자, 출처 기능, 기여 메시지, 정책, 상태 및 스냅샷 사용 가능 여부를 표시합니다. |
+
+### `/admin game reward-rollback`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `ledger_id` | 예 | 대기 조정 사례 또는 배포 환경의 보상/감사 기록에서 찾는 이 서버의 정수 보상 원장 ID입니다. 확인을 거쳐 해당 보상 직전의 플레이어 전체 게임 상태를 복원합니다. 보상 이후 진행도도 함께 되돌아갑니다. |
+
+### `/admin game reward-reconciliations`
+
+인수가 없습니다. 삭제되거나 부적격 처리된 보상 기여로 생긴 대기 사례를
+최대 25개 표시합니다. 각 사례에는 `resolve-reconciliation`에 사용할 사례 ID와
+설정된 보상 원장 ID가 있을 수 있습니다.
+
+### `/admin game resolve-reconciliation`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `case_id` | 예 | `/admin game reward-reconciliations`에서 확인한 대기 중인 사례의 정수 ID입니다. |
+| `note` | 예 | 공백만으로 이루어지지 않은 최대 500자 처리 기록입니다. 검토 또는 해결 방법을 적습니다. 확인이 필요합니다. |
+
+## 진단
+
+### `/admin diagnostics reward`
+
+| 인수 | 필수 | 허용값과 동작 |
+| --- | --- | --- |
+| `message_id` | 예 | 원본 공지 신청의 숫자형 Discord 메시지 ID입니다. 레거시 보상 기록의 존재 여부를 확인하고, 있으면 유형, 수령자, 게시 스레드 및 기록 시각을 표시합니다. |
+
+### `/admin diagnostics migration`
+
+인수가 없습니다. 가져온 공지 대기열 및 릴레이 이야기 설정을 레거시 배포
+설정과 비교합니다. **게임 플레이어 데이터 마이그레이션은 확인하지 않습니다.**
 
 ## 답장 기반 검수
 
-슬래시 명령은 답장한 메시지를 읽을 수 없으므로, 적격 공지 신청 또는 릴레이 기여에 답장하여 다음을 보냅니다.
+슬래시 명령은 답장 대상 메시지를 식별할 수 없습니다. 적격 공지 신청 또는
+릴레이 기여에 답장하고 다음 형식으로 입력합니다.
 
 ```text
 !moderate reject [사유]
@@ -33,5 +340,14 @@
 !moderate skip [사유]
 ```
 
-이 명령은 설정된 검수자와 관리자만 사용할 수 있습니다. 성공 시 봇은 검수 명령을 삭제하고 결과를
-감사 대상으로 보냅니다. 감사 대상이 없으면 설정·권한 기반 검수자에게 DM으로 알립니다.
+조치 뒤의 텍스트는 자유 형식의 선택 사유입니다. 봇은 서버/기능 검수 정책을
+확인하고, 성공하면 검수 명령을 삭제하고 결정을 기록합니다. 감사 채널이
+설정되어 있으면 그곳에 결과를 알립니다. 감사 채널이 없으면 가능할 때 권한이
+있는 검수자에게 DM을 보냅니다.
+
+## 확인 및 감사 기록
+
+대기열 채널 변경, 일정 설정 변경, 즉시 게시, 대기열 보관, 릴레이 채널 변경 및
+삭제, 게임 활성화/비활성화, 보상 정책 변경, 보상 되돌리기, 조정 사례 완료는
+확인 버튼을 요청합니다. 구성 및 검수 작업은 데이터베이스 감사 로그에 기록됩니다.
+감사 채널을 설정했고 봇이 사용할 수 있으면 해당 채널에도 알림을 보냅니다.

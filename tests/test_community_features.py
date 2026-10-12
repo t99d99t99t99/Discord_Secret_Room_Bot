@@ -136,6 +136,44 @@ class CommunityFeatureTests(unittest.IsolatedAsyncioTestCase):
             ("Weekly Notes — Ada", "By Ada:\\nA contribution"),
         )
 
+    def test_publication_template_formats_local_date_and_sunday_week(self):
+        from datetime import datetime, timezone
+
+        queue = {
+            "display_name": "Weekly Notes",
+            "timezone": "Asia/Seoul",
+            "title_template": "{{YYYY}} {{YY}} {{MM}} {{M}} {{DD}} {{D}} / {{week}} / {{queue_name}} / {{author}}",
+            "content_template": "{{content}}",
+        }
+        published_at = datetime(2026, 10, 10, 15, 30, tzinfo=timezone.utc)
+
+        self.assertEqual(
+            NoticeQueueService._render_publication(
+                queue, "Ada", "A contribution", published_at
+            ),
+            (
+                "2026 26 10 10 11 11 / 2 / Weekly Notes / Ada",
+                "A contribution",
+            ),
+        )
+
+    def test_publication_title_drops_separator_when_author_is_hidden(self):
+        from datetime import datetime, timezone
+
+        queue = {
+            "display_name": "토막상식",
+            "timezone": "Asia/Seoul",
+            "title_template": "{{YYYY}}년 {{MM}}월 {{DD}}일 토막상식, {{author}}",
+            "content_template": "{{content}}",
+        }
+        published_at = datetime(2026, 10, 11, 0, 0, tzinfo=timezone.utc)
+
+        title, _ = NoticeQueueService._render_publication(
+            queue, "", "내용", published_at
+        )
+
+        self.assertEqual(title, "2026년 10월 11일 토막상식")
+
     def test_long_publication_content_is_split_without_loss(self):
         from cogs.notice_queues import split_discord_message_content
 
