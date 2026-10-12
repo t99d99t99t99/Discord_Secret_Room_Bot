@@ -1,19 +1,26 @@
-# 게시판과 시크리타이 보상
-## 이야기잇기
-- 글은 200자 이하여야 합니다.
-- 같은 사람이 연속으로 작성할 수 없습니다.
-- 규칙에 맞는 글 하나마다 모든 색/형태 비밀의 수량이 각각 `floor(기존 수량 × 1.05)`가 됩니다.
+# Community features and legacy Secretae rewards
 
-## 오늘의 토막상식
-- 가장 최근 신청 스레드에 작성합니다.
-- 사진을 첨부하거나 본문이 20자 이상이어야 하며, 본문은 300자를 넘을 수 없습니다.
-- 한 신청 스레드에서 한 사람은 최대 10개까지 신청할 수 있습니다.
-- 공개 게시된 뒤에만 모든 11종 비밀이 각각 2배 보상을 받습니다.
+## Relay story
 
-## 이 주의 교훈
-- 가장 최근 신청 스레드에 한 번만 신청할 수 있습니다.
-- 공개 게시된 뒤에만 이야기의 정수 보상을 받습니다.
-- 정수가 1개 이상이면 보유 정수가 두 배가 되고, 정수가 0개이면 첫 보상으로 1을 받습니다.
+- A contribution must be 200 characters or fewer.
+- The same member must wait for one other eligible contributor before posting again.
+- Each eligible contribution multiplies every colour and shape secret by
+  `floor(current amount × 1.05)`.
 
-각 보상은 게시물 메시지 ID를 기준으로 한 번만 적용됩니다. 보상 결과는 작성자 DM과
-공개된 게시물의 스레드에 안내됩니다.
+## Daily trivia
+
+- Submit in the newest submission thread.
+- Include an image or at least 20 characters of text; text may not exceed 300 characters.
+- Each member may submit at most 10 entries per submission thread.
+- Only a publicly published entry receives the legacy reward: every one of the
+  11 secrets is doubled.
+
+## Weekly lesson
+
+- Submit once in the newest submission thread.
+- Story essence is awarded only after public publication.
+- If the recipient already has essence, it is doubled; an essence balance of
+  zero receives one as the first reward.
+
+Each reward is idempotent by publication message ID. The contributor receives a
+DM and the public publication thread receives the reward result.

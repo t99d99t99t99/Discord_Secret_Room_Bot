@@ -19,6 +19,7 @@ from discord.ext import commands
 from .secretae_incremental.db import get_submission_reward
 from .game_config import REWARD_TYPES, reward_policy, reward_policy_label
 from .localization import command_name, guild_locale, interaction_locale, text
+from .notice_queues import split_discord_message_content
 from .admin_support import ConfirmationView, guild_settings as _settings
 
 logger = logging.getLogger(__name__)
@@ -1235,36 +1236,89 @@ class Admin(commands.Cog):
             if row["submission_period_hours"]
             else text("admin.queue.view.period_open", locale)
         )
-        await interaction.response.send_message(
-            text(
-                "admin.queue.view",
-                locale,
-                name=row["display_name"],
-                id=queue_id,
-                state=self._label("state", row["state"], locale),
-                accepting=text(
-                    (
-                        "admin.queue.accepting"
-                        if row["accepting_submissions"]
-                        else "admin.queue.closed"
-                    ),
-                    locale,
-                ),
-                eligible=eligible,
-                cadence=self._label("cadence", row["cadence"], locale),
-                time=row["schedule_time"],
-                timezone=row["timezone"],
-                period=period,
-                submission_channel=row["submission_channel_id"],
-                publication_channel=row["publication_channel_id"],
-                selection=self._label("selection", row["selection_policy"], locale),
-                reward=reward_policy_label(row["reward_policy"], locale),
-                title=row["title_template"],
-                content=row["content_template"],
-                last=self._label("state", last["status"] if last else None, locale),
-            ),
-            ephemeral=True,
+        minimum = (
+            str(row["min_content_length"])
+            if row["min_content_length"] is not None
+            else text("admin.queue.view.unlimited", locale)
         )
+        maximum = (
+            str(row["max_content_length"])
+            if row["max_content_length"] is not None
+            else text("admin.queue.view.unlimited", locale)
+        )
+        mention = (
+            f"<@&{row['submission_mention_role_id']}>"
+            if row["submission_mention_role_id"]
+            else (
+                text("admin.queue.view.everyone", locale)
+                if row["submission_mention_everyone"]
+                else text("admin.queue.view.no_mention", locale)
+            )
+        )
+        rendered = text(
+            "admin.queue.view",
+            locale,
+            name=row["display_name"],
+            id=queue_id,
+            state=self._label("state", row["state"], locale),
+            accepting=text(
+                (
+                    "admin.queue.accepting"
+                    if row["accepting_submissions"]
+                    else "admin.queue.closed"
+                ),
+                locale,
+            ),
+            eligible=eligible,
+            cadence=self._label("cadence", row["cadence"], locale),
+            time=row["schedule_time"],
+            timezone=row["timezone"],
+            period=period,
+            submission_channel=row["submission_channel_id"],
+            publication_channel=row["publication_channel_id"],
+            selection=self._label("selection", row["selection_policy"], locale),
+            reward=reward_policy_label(row["reward_policy"], locale),
+            title=row["title_template"],
+            content=row["content_template"],
+            submission_title=row["submission_title_template"],
+            submission_description=row["submission_description_template"],
+            mention=mention,
+            new_thread_threshold=row["new_thread_threshold"],
+            minimum=minimum,
+            maximum=maximum,
+            attachments=text(
+                (
+                    "admin.queue.view.allowed"
+                    if row["allow_attachments"]
+                    else "admin.queue.view.denied"
+                ),
+                locale,
+            ),
+            links=text(
+                (
+                    "admin.queue.view.allowed"
+                    if row["allow_links"]
+                    else "admin.queue.view.denied"
+                ),
+                locale,
+            ),
+            edits=text(
+                (
+                    "admin.queue.view.allowed"
+                    if row["allow_edits"]
+                    else "admin.queue.view.denied"
+                ),
+                locale,
+            ),
+            no_entry_action=row["no_entry_action"],
+            last=self._label("state", last["status"] if last else None, locale),
+        )
+        # Configured templates can make this report longer than one Discord
+        # message, so keep every setting visible across private follow-ups.
+        chunks = split_discord_message_content(rendered)
+        await interaction.response.send_message(chunks[0], ephemeral=True)
+        for chunk in chunks[1:]:
+            await interaction.followup.send(chunk, ephemeral=True)
 
     @queue.command(
         name=command_name("edit"),
