@@ -110,6 +110,15 @@ values. A weekly queue's `weekday` uses Monday `0` through Sunday `6`.
 | `attribution` | No | `Display name` (`display_name`) to show the contributor's display name, or `No attribution` (`none`). |
 | `title_template` | No | Non-empty publication title, at most 100 characters. New daily/manual queues default to `{{YYYY}}년 {{MM}}월 {{DD}}일 {{queue_name}}, {{author}}`; weekly queues default to `{{MM}}월 {{week}}주차, {{author}}`. Date tokens use the publication date in the queue's `timezone`. `{{YYYY}}` is the four-digit year, `{{YY}}` the two-digit year, `{{MM}}` the zero-padded month, `{{M}}` the month without padding, `{{DD}}` the zero-padded day, `{{D}}` the day without padding, and `{{week}}` the Sunday number in the month (1–5; weekly queues publish on their configured weekday). `{{queue_name}}` inserts the queue's display name, `{{author}}` the contributor's display name (blank when attribution is disabled), and `{{content}}` the submitted text. |
 | `content_template` | No | Non-empty publication body, at most 1,900 characters. Supports all the same date and text placeholders as `title_template`. |
+| `submission_title_template` | No | New submission-thread title, at most 100 characters. Supports `{{YYYY}}`, `{{YY}}`, `{{MM}}`, `{{M}}`, `{{DD}}`, `{{D}}`, `{{week}}` (Sunday week of month), and `{{queue_name}}`, using the queue's timezone. |
+| `submission_description_template` | No | New submission-thread opening message, at most 1,900 characters. Supports the same date and queue-name placeholders as the submission title. |
+| `mention_role` | No | Server role to mention in a separate message after creating the thread. |
+| `mention_everyone` | No | Whether to send a separate `@everyone` message after creating the thread. A selected role takes precedence when both are configured. |
+| `new_thread_threshold` | No | Integer `0` or greater. After publication, automatically create a new submission thread only when the number of eligible queued submissions is below this value. Set `0` to disable automatic opening. Manual `/admin queue open-submissions` is unaffected. |
+
+Imported legacy defaults preserve the old behavior: 토막상식 uses a date-based
+title, its legacy Korean opening text, `@everyone`, and threshold `5`; 교훈 uses
+a month/week title, its legacy opening text, `@everyone`, and threshold `1`.
 
 ### `/admin queue set-channels`
 

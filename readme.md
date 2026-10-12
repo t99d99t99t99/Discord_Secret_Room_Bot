@@ -45,7 +45,7 @@ the audit channel (or DMs eligible moderators when no audit channel is set).
 | `/admin setup set-moderators` | Set disabled, Manage Messages, or one-role moderation. |
 | `/admin queue create` | Create a daily, weekly, or manual notice queue. |
 | `/admin queue list` / `view` | Inspect queue configuration, eligible entries, and last result. |
-| `/admin queue configure` / `set-channels` | Change policy/schedule or redirect channels. |
+| `/admin queue configure` / `set-channels` | Change policy, schedule, publication and submission-thread templates, mentions, backlog threshold, or channels. |
 | `/admin queue configure-submissions` | Configure content rules, submission-window duration, edits, links, attachments, and empty-queue handling. |
 | `/admin queue open-submissions` | Create a submission thread for a queue. |
 | `/admin queue pause` / `resume` / `archive` | Control a queue without erasing its history. |

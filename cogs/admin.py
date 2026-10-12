@@ -1308,7 +1308,7 @@ class Admin(commands.Cog):
 
     @queue.command(
         name=command_name("configure"),
-        description="Configure selection, schedule, limits, attribution, and template.",
+        description="Configure queue schedule, templates, mentions, and thread threshold.",
     )
     @app_commands.choices(
         selection=[
@@ -1333,6 +1333,11 @@ class Admin(commands.Cog):
         attribution: app_commands.Choice[str] | None = None,
         title_template: str | None = None,
         content_template: str | None = None,
+        submission_title_template: str | None = None,
+        submission_description_template: str | None = None,
+        mention_role: discord.Role | None = None,
+        mention_everyone: bool | None = None,
+        new_thread_threshold: int | None = None,
     ):
         assert interaction.guild is not None
         try:
@@ -1399,8 +1404,38 @@ class Admin(commands.Cog):
                 ephemeral=True,
             )
             return
+        if submission_title_template is not None and (
+            not submission_title_template.strip()
+            or len(submission_title_template) > 100
+        ):
+            await interaction.response.send_message(
+                text(
+                    "admin.queue.title_invalid", await interaction_locale(interaction)
+                ),
+                ephemeral=True,
+            )
+            return
+        if submission_description_template is not None and (
+            not submission_description_template.strip()
+            or len(submission_description_template) > 1_900
+        ):
+            await interaction.response.send_message(
+                text(
+                    "admin.queue.content_invalid", await interaction_locale(interaction)
+                ),
+                ephemeral=True,
+            )
+            return
+        if new_thread_threshold is not None and new_thread_threshold < 0:
+            await interaction.response.send_message(
+                text(
+                    "admin.queue.limit_invalid", await interaction_locale(interaction)
+                ),
+                ephemeral=True,
+            )
+            return
         await self.bot.db.execute(
-            "UPDATE notice_queues SET selection_policy=COALESCE($2,selection_policy),per_member_limit=COALESCE($3,per_member_limit),schedule_time=$4,timezone=COALESCE($5,timezone),schedule_weekday=COALESCE($6,schedule_weekday),attribution_policy=COALESCE($7,attribution_policy),title_template=COALESCE($8,title_template),content_template=COALESCE($9,content_template),config_version=config_version+1,updated_at=NOW() WHERE id=$1",
+            "UPDATE notice_queues SET selection_policy=COALESCE($2,selection_policy),per_member_limit=COALESCE($3,per_member_limit),schedule_time=$4,timezone=COALESCE($5,timezone),schedule_weekday=COALESCE($6,schedule_weekday),attribution_policy=COALESCE($7,attribution_policy),title_template=COALESCE($8,title_template),content_template=COALESCE($9,content_template),submission_title_template=COALESCE($10,submission_title_template),submission_description_template=COALESCE($11,submission_description_template),submission_mention_role_id=COALESCE($12,submission_mention_role_id),submission_mention_everyone=COALESCE($13,submission_mention_everyone),new_thread_threshold=COALESCE($14,new_thread_threshold),config_version=config_version+1,updated_at=NOW() WHERE id=$1",
             queue_id,
             selection.value if selection else None,
             per_member_limit,
@@ -1410,6 +1445,11 @@ class Admin(commands.Cog):
             attribution.value if attribution else None,
             title_template,
             content_template,
+            submission_title_template,
+            submission_description_template,
+            mention_role.id if mention_role else None,
+            mention_everyone,
+            new_thread_threshold,
         )
         await self._audit(
             interaction,

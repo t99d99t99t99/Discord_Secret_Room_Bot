@@ -37,7 +37,7 @@ CommunityNoticeBot은 구성원이 제출한 글을 정해진 시간에 게시�
 | --- | --- |
 | `/admin setup start`, `status` | 안내형 설정을 시작하고 언어·검수 정책·선택 기능 상태를 확인합니다. |
 | `/admin queue create`, `list`, `view` | 일일·주간·수동 공지 대기열을 만들고 상태를 확인합니다. |
-| `/admin queue configure`, `configure-submissions`, `set-channels` | 일정, 게시 서식, 신청 기간·규칙, 채널을 설정합니다. |
+| `/admin queue configure`, `configure-submissions`, `set-channels` | 일정, 게시·신청 스레드 서식, 멘션, 새 스레드 생성 임계값, 신청 기간·규칙, 채널을 설정합니다. |
 | `/admin queue open-submissions`, `pause`, `resume`, `archive` | 신청 스레드와 대기열 수명주기를 관리합니다. |
 | `/admin queue publish-now`, `retry`, `moderate` | 즉시 게시, 중단 작업 재시도, 적격 신청 검수를 수행합니다. |
 | `/admin relay create`, `list`, `view`, `edit`, `configure-posting` | 독립 릴레이 이야기의 채널과 규칙을 관리합니다. |

@@ -197,6 +197,11 @@ async def initialize_notice_schema(conn) -> None:
             submission_channel_id BIGINT NOT NULL,
             publication_channel_id BIGINT NOT NULL,
             active_submission_thread_id BIGINT,
+            submission_title_template TEXT NOT NULL DEFAULT '{{queue_name}} submissions',
+            submission_description_template TEXT NOT NULL DEFAULT 'Submit an entry for **{{queue_name}}** here.',
+            submission_mention_role_id BIGINT,
+            submission_mention_everyone BOOLEAN NOT NULL DEFAULT FALSE,
+            new_thread_threshold INTEGER NOT NULL DEFAULT 1 CHECK(new_thread_threshold >= 0),
             cadence TEXT NOT NULL DEFAULT 'daily' CHECK(cadence IN ('daily', 'weekly', 'manual')),
             schedule_time TIME NOT NULL DEFAULT '09:00',
             schedule_weekday SMALLINT CHECK(schedule_weekday BETWEEN 0 AND 6),
@@ -255,6 +260,11 @@ async def initialize_notice_schema(conn) -> None:
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS submission_period_hours INTEGER CHECK(submission_period_hours > 0)",
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS submission_opened_at TIMESTAMPTZ",
         "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS content_template TEXT NOT NULL DEFAULT '{{content}}'",
+        "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS submission_title_template TEXT NOT NULL DEFAULT '{{queue_name}} submissions'",
+        "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS submission_description_template TEXT NOT NULL DEFAULT 'Submit an entry for **{{queue_name}}** here.'",
+        "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS submission_mention_role_id BIGINT",
+        "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS submission_mention_everyone BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE notice_queues ADD COLUMN IF NOT EXISTS new_thread_threshold INTEGER NOT NULL DEFAULT 1 CHECK(new_thread_threshold >= 0)",
         "ALTER TABLE notice_queues ALTER COLUMN title_template SET DEFAULT '{{YYYY}}년 {{MM}}월 {{DD}}일 {{queue_name}}, {{author}}'",
     ):
         await conn.execute(statement)
@@ -269,6 +279,24 @@ async def initialize_notice_schema(conn) -> None:
             ELSE '{{YYYY}}년 {{MM}}월 {{DD}}일 {{queue_name}}, {{author}}'
         END
         WHERE title_template = '{{queue_name}} — {{author}}'
+    """)
+    # Upgrade queues imported before submission-thread presentation was configurable.
+    await conn.execute("""
+        UPDATE notice_queues
+        SET submission_title_template = CASE
+                WHEN provenance->>'legacy_kind' = 'tomak' THEN '{{YYYY}}년 {{MM}}월 {{DD}}일 토막상식 신청'
+                WHEN provenance->>'legacy_kind' = 'kyohoon' THEN '{{M}}월 {{week}}주차 교훈 신청'
+                ELSE submission_title_template END,
+            submission_description_template = CASE
+                WHEN provenance->>'legacy_kind' = 'tomak' THEN '토막상식 신청하세요!!!!!!!!!!!!!!'
+                WHEN provenance->>'legacy_kind' = 'kyohoon' THEN '교훈 신청하세요!!!!!!!!!!'
+                ELSE submission_description_template END,
+            submission_mention_everyone = CASE WHEN provenance->>'legacy_kind' IN ('tomak','kyohoon') THEN TRUE ELSE submission_mention_everyone END,
+            new_thread_threshold = CASE
+                WHEN provenance->>'legacy_kind' = 'tomak' AND new_thread_threshold = 1 THEN 5
+                ELSE new_thread_threshold END
+        WHERE submission_title_template = '{{queue_name}} submissions'
+           OR submission_description_template = 'Submit an entry for **{{queue_name}}** here.'
     """)
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS notice_jobs (

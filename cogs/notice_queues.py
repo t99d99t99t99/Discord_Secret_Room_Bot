@@ -125,8 +125,9 @@ class NoticeQueueService(commands.Cog):
             row = await self.bot.db.fetchrow(
                 """INSERT INTO notice_queues(guild_id,queue_key,display_name,state,accepting_submissions,
                    submission_channel_id,publication_channel_id,cadence,schedule_weekday,schedule_time,timezone,
-                   selection_policy,per_member_limit,reward_policy,provenance,title_template)
-                   VALUES($1,$2,$3,$4,TRUE,$5,$6,$7,$8,$9,'Asia/Seoul',$10,$11,$12,$13,$14)
+                   selection_policy,per_member_limit,reward_policy,provenance,title_template,
+                   submission_title_template,submission_description_template,new_thread_threshold,submission_mention_everyone)
+                   VALUES($1,$2,$3,$4,TRUE,$5,$6,$7,$8,$9,'Asia/Seoul',$10,$11,$12,$13,$14,$15,$16,$17,TRUE)
                    ON CONFLICT(guild_id,queue_key) DO UPDATE SET updated_at=NOW()
                    RETURNING id""",
                 int(guild_id),
@@ -147,6 +148,17 @@ class NoticeQueueService(commands.Cog):
                     if key == "tomak"
                     else "{{MM}}월 {{week}}주차, {{author}}"
                 ),
+                (
+                    "{{YYYY}}년 {{MM}}월 {{DD}}일 토막상식 신청"
+                    if key == "tomak"
+                    else "{{M}}월 {{week}}주차 교훈 신청"
+                ),
+                (
+                    "토막상식 신청하세요!!!!!!!!!!!!!!"
+                    if key == "tomak"
+                    else "교훈 신청하세요!!!!!!!!!!"
+                ),
+                5 if key == "tomak" else 1,
             )
             # Adopt the currently open bot-owned submission thread so the
             # generalized listener continues accepting entries immediately.
@@ -346,11 +358,36 @@ class NoticeQueueService(commands.Cog):
         ) or await self.bot.fetch_channel(queue["submission_channel_id"])
         if not hasattr(channel, "create_thread"):
             raise ValueError("The submission destination cannot create a thread.")
-        created = await channel.create_thread(
-            name=f"{queue['display_name']} submissions",
-            content=f"Submit an entry for **{queue['display_name']}** here.",
-        )
+        opened_at = datetime.now(ZoneInfo(queue["timezone"]))
+        values = {
+            "{{queue_name}}": queue["display_name"],
+            "{{YYYY}}": f"{opened_at.year:04d}",
+            "{{YY}}": f"{opened_at.year % 100:02d}",
+            "{{MM}}": f"{opened_at.month:02d}",
+            "{{M}}": str(opened_at.month),
+            "{{DD}}": f"{opened_at.day:02d}",
+            "{{D}}": str(opened_at.day),
+            "{{week}}": str(sunday_week_of_month(opened_at.date())),
+        }
+        title = queue["submission_title_template"]
+        description = queue["submission_description_template"]
+        for token, value in values.items():
+            title = title.replace(token, value)
+            description = description.replace(token, value)
+        created = await channel.create_thread(name=title[:100], content=description)
         thread = created.thread if hasattr(created, "thread") else created
+        # Mentioning a configured role requires an explicit allowed-mentions policy.
+        role_id = queue["submission_mention_role_id"]
+        if role_id:
+            await thread.send(
+                f"<@&{role_id}>",
+                allowed_mentions=discord.AllowedMentions(roles=True, everyone=False),
+            )
+        elif queue["submission_mention_everyone"]:
+            await thread.send(
+                "@everyone",
+                allowed_mentions=discord.AllowedMentions(everyone=True),
+            )
         await self.bot.db.execute(
             "UPDATE notice_queues SET active_submission_thread_id=$2, submission_opened_at=NOW(), accepting_submissions=TRUE, updated_at=NOW() WHERE id=$1",
             queue_id,
@@ -623,16 +660,20 @@ class NoticeQueueService(commands.Cog):
             await self._issue_legacy_reward(
                 queue, submission, source_message, publication
             )
-            # A successful publication advances the queue into its next
-            # submission period.  Failure is reported but never changes the
-            # already durable publication/reward outcome.
-            try:
-                await self.open_submissions(queue_id)
-            except (discord.HTTPException, ValueError) as exc:
-                await self._alert(
-                    queue["guild_id"],
-                    f"**{queue['display_name']}** 다음 신청 스레드를 열지 못했습니다: {exc}",
-                )
+            # Preserve the legacy queue policy: only open another thread when
+            # the remaining eligible backlog falls below its configured limit.
+            pending_count = await self.bot.db.fetchval(
+                "SELECT COUNT(*) FROM notice_submissions WHERE queue_id=$1 AND status='eligible'",
+                queue_id,
+            )
+            if pending_count < queue["new_thread_threshold"]:
+                try:
+                    await self.open_submissions(queue_id)
+                except (discord.HTTPException, ValueError) as exc:
+                    await self._alert(
+                        queue["guild_id"],
+                        f"**{queue['display_name']}** 다음 신청 스레드를 열지 못했습니다: {exc}",
+                    )
             if scheduled_for:
                 await self.bot.db.execute(
                     "UPDATE notice_jobs SET state='completed',completed_at=NOW(),lease_expires_at=NULL WHERE queue_id=$1 AND job_type='publish' AND scheduled_for=$2",
