@@ -1,3 +1,5 @@
+<a href="community-features.md"><kbd>English</kbd></a> <a href="community-features.ko.md"><kbd>한국어</kbd></a>
+
 # Community features and legacy Secretae rewards
 
 ## Relay story

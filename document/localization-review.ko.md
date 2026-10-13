@@ -1,3 +1,5 @@
+<a href="localization-review.md"><kbd>English</kbd></a> <a href="localization-review.ko.md"><kbd>한국어</kbd></a>
+
 # 현지화 기여 및 검토 절차
 
 구성원과 관리자가 보는 모든 변경은 한국어와 영어를 함께 제공합니다. 영어를 나중에

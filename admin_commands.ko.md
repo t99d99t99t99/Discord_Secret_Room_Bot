@@ -1,3 +1,5 @@
+<a href="admin_commands.md"><kbd>English</kbd></a> <a href="admin_commands.ko.md"><kbd>한국어</kbd></a>
+
 # CommunityNoticeBot 관리자 명령어 참고
 
 이 문서는 한국어 Discord 클라이언트에 표시되는 `/관리` 명령 이름과 인수,

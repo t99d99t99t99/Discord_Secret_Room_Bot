@@ -1,3 +1,5 @@
+<a href="secretae-incremental.md"><kbd>English</kbd></a> <a href="secretae-incremental.ko.md"><kbd>한국어</kbd></a>
+
 # Essence Foundry game guide
 
 Essence Foundry is an incremental game. Produce secret organisms for secret

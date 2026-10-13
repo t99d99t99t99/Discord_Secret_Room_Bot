@@ -1,3 +1,5 @@
+<a href="release-checklist.md"><kbd>English</kbd></a> <a href="release-checklist.ko.md"><kbd>한국어</kbd></a>
+
 # CommunityNoticeBot 릴리스 점검표
 
 구성, 공지, 릴레이 이야기, 게임 보상, 현지화 또는 마이그레이션 동작을 변경하는 모든

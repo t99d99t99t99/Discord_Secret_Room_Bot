@@ -1,3 +1,5 @@
+<a href="migration-recovery.md"><kbd>English</kbd></a> <a href="migration-recovery.ko.md"><kbd>한국어</kbd></a>
+
 # Legacy notice and relay migration recovery
 
 This procedure applies only to the existing `비밀 방` deployment. New servers do

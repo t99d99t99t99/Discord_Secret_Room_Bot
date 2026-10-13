@@ -1,3 +1,5 @@
+<a href="migration-recovery.md"><kbd>English</kbd></a> <a href="migration-recovery.ko.md"><kbd>한국어</kbd></a>
+
 # 레거시 공지·릴레이 마이그레이션 복구
 
 이 절차는 기존 `비밀 방` 배포에만 적용됩니다. 새 서버는 레거시 환경 ID나 레거시

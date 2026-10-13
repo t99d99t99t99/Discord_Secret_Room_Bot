@@ -1,3 +1,5 @@
+<a href="secretae-incremental.md"><kbd>English</kbd></a> <a href="secretae-incremental.ko.md"><kbd>한국어</kbd></a>
+
 # 시크리타이 인크리멘탈 상세 안내
 
 시크리타이 인크리멘탈은 **비밀 유기체**로 비밀 파편을 생산하고, 파편으로
@@ -162,4 +164,4 @@
 
 공개된 이 주의 교훈은 이야기의 정수를 보상합니다. 기존 정수가 1 이상이면 두 배가 되고,
 0이면 첫 보상으로 1을 받습니다. 자세한 게시판 규칙은
-[게시판과 보상 안내](community-features.md)를 참고하세요.
+[게시판과 보상 안내](community-features.ko.md)를 참고하세요.

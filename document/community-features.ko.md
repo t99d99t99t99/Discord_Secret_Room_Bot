@@ -1,3 +1,5 @@
+<a href="community-features.md"><kbd>English</kbd></a> <a href="community-features.ko.md"><kbd>한국어</kbd></a>
+
 # 게시판과 시크리타이 보상
 ## 이야기잇기
 - 글은 200자 이하여야 합니다.

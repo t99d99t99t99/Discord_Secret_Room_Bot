@@ -1,3 +1,5 @@
+<a href="admin_commands.md"><kbd>English</kbd></a> <a href="admin_commands.ko.md"><kbd>한국어</kbd></a>
+
 # CommunityNoticeBot administrator command reference
 
 This guide documents the arguments accepted by every `/admin` command. Discord

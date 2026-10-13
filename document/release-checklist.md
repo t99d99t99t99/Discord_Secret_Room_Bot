@@ -1,3 +1,5 @@
+<a href="release-checklist.md"><kbd>English</kbd></a> <a href="release-checklist.ko.md"><kbd>한국어</kbd></a>
+
 # CommunityNoticeBot release checklist
 
 Complete this checklist for each release that changes configuration, notices,

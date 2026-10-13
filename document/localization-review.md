@@ -1,3 +1,5 @@
+<a href="localization-review.md"><kbd>English</kbd></a> <a href="localization-review.ko.md"><kbd>한국어</kbd></a>
+
 # Localization contribution and review process
 
 Every member- and administrator-facing change must ship in Korean and English.
