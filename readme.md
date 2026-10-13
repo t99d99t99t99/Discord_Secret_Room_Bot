@@ -8,4 +8,3 @@
 - [Migration and recovery](document/migration-recovery.md)
 - [Release checklist](document/release-checklist.md)
 - [Localization contribution and review](document/localization-review.md)
-- [Code readability standards](AGENTS.md)

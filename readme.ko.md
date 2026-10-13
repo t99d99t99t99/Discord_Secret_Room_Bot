@@ -8,4 +8,3 @@
 - [마이그레이션 및 복구](document/migration-recovery.ko.md)
 - [릴리스 점검표](document/release-checklist.ko.md)
 - [현지화 기여 및 검토](document/localization-review.ko.md)
-- [코드 가독성 기준](AGENTS.md)
