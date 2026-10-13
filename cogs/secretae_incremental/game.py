@@ -589,7 +589,7 @@ class SecretaeIncremental(commands.Cog):
 
 
 class ConcentrationView(discord.ui.View):
-    """되돌릴 수 없는 농축을 위한 개인용 확인 컨트롤입니다."""
+    """농축을 위한 개인용 확인 컨트롤입니다."""
 
     def __init__(self, cog, guild_id, user_id, locale="ko"):
         """1분 후 만료되는 확인 뷰를 생성합니다."""

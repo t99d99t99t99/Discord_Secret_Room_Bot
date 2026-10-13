@@ -262,11 +262,13 @@ def production_step(state):
 
 
 def max_synthesis_step(state):
-    """Apply the maximum-synthesis priority algorithm to an in-memory state."""
+    """Spend half of each affordable group in priority order, then all red."""
     bought = {key: ZERO for key in SECRETS}
     original_shards = state["shards"]
     original_secrets = dict(state["secrets"])
     for key in MAX_SYNTHESIS_ORDER:
+        # Find the largest bundle this secret could currently afford. Each
+        # purchase changes later prices and budgets, so recalculate per secret.
         lower, upper = ZERO, ONE
         while state["shards"] >= quote_synthesis(state, key, upper):
             lower, upper = upper, upper * N.of(2)
@@ -281,11 +283,12 @@ def max_synthesis_step(state):
                 lower = midpoint
             else:
                 upper = midpoint
-        if lower.sign:
-            cost = quote_synthesis(state, key, lower)
+        amount = lower if key == RED else (lower / N.of(2)).floor()
+        if amount.sign:
+            cost = quote_synthesis(state, key, amount)
             state["shards"] = state["shards"] - cost
-            state["secrets"][key] = state["secrets"][key] + lower
-            bought[key] = lower
+            state["secrets"][key] = state["secrets"][key] + amount
+            bought[key] = amount
     return {
         "shards": (original_shards, original_shards - state["shards"]),
         "secrets": {key: (original_secrets[key], bought[key]) for key in SECRETS},
@@ -380,7 +383,7 @@ async def produce(pool, guild_id, discord_id):
 
 
 async def max_synthesize(pool, guild_id, discord_id):
-    """엄격한 우선순위대로 각 비밀의 구매 가능한 최대 묶음을 구매합니다."""
+    """우선순위대로 각 비밀의 구매 가능한 최대 묶음을 구매합니다."""
     async with pool.acquire() as conn:
         async with conn.transaction():
             state = await _state(conn, guild_id, discord_id)

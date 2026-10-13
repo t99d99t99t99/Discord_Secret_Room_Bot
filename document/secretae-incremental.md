@@ -36,8 +36,9 @@ square cost multiplier = 1 / (1 + ln(1 + square secret) / 17)
 final price = max(1, floor(base price × (1 - catch-up discount) × square multiplier))
 ```
 
-`/game max-synthesize` buys the largest affordable groups using the same rules, in
-this priority order:
+`/game max-synthesize` buys half of the largest affordable group for each secret,
+recomputing affordability with the shards left after each purchase. It buys all
+affordable red secrets at the end, in this priority order:
 
 ```text
 ◯ → □ → ♡ → ⬛️ → ⬜️ → 🟪 → 🟦 → 🟩 → 🟨 → 🟧 → 🟥

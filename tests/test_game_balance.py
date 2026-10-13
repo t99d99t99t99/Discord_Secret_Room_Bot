@@ -1,6 +1,11 @@
 import unittest
+from unittest.mock import patch
 
-from cogs.secretae_incremental.constants import PRODUCTION_DIVISOR
+from cogs.secretae_incremental.constants import (
+    MAX_SYNTHESIS_ORDER,
+    PRODUCTION_DIVISOR,
+    RED,
+)
 from cogs.secretae_incremental.db import (
     community_reward_step,
     concentration_gain,
@@ -16,6 +21,25 @@ from cogs.secretae_incremental.simulation import (
 
 
 class GameBalanceTests(unittest.TestCase):
+    def test_max_synthesis_buys_half_available_until_red_then_all_red(self):
+        state = fresh_state()
+        state["shards"] = N.of(100)
+
+        # A unit-price quote makes each affordable amount equal to the budget,
+        # so this verifies the sequential half-budget rule and final red sweep.
+        with patch(
+            "cogs.secretae_incremental.db.quote_synthesis",
+            side_effect=lambda _, __, amount: amount,
+        ):
+            result = max_synthesis_step(state)
+
+        expected = [N.of(amount) for amount in (50, 25, 12, 6, 3, 2, 1, 0, 0, 0, 1)]
+        self.assertEqual(
+            [result["secrets"][key][1] for key in MAX_SYNTHESIS_ORDER], expected
+        )
+        self.assertEqual(result["secrets"][RED][1], N.of(1))
+        self.assertEqual(state["shards"], N.of(0))
+
     def test_community_reward_step_uses_guild_local_state(self):
         state = fresh_state()
         other_guild = fresh_state()
@@ -33,12 +57,15 @@ class GameBalanceTests(unittest.TestCase):
         result = seven_day_route(state)
         self.assertTrue(result["can_concentrate"])
         self.assertGreaterEqual(result["final_shards"], N.of("1e15"))
-        self.assertLess(result["final_shards"], N.of("1e16"))
+        self.assertLess(result["final_shards"], N.of("1e24"))
         self.assertGreaterEqual(result["essence_gain"], N.of(1))
         self.assertLessEqual(result["essence_gain"], N.of(3))
         self.assertEqual(len(result["purchases"]), 6)
         self.assertTrue(
-            all(any(gain.sign for _, gain in step["secrets"].values()) for step in result["purchases"])
+            all(
+                any(gain.sign for _, gain in step["secrets"].values())
+                for step in result["purchases"]
+            )
         )
 
     def test_fresh_v1_without_max_cannot_concentrate(self):
@@ -95,7 +122,9 @@ class GameBalanceTests(unittest.TestCase):
         self.assertTrue(active["can_concentrate"])
         for days in range(1, 5):
             early = seven_day_route(
-                fresh_state(), rewards_by_day={day: [policy] for day in range(1, days + 1)}, days=days
+                fresh_state(),
+                rewards_by_day={day: [policy] for day in range(1, days + 1)},
+                days=days,
             )
             self.assertFalse(early["can_concentrate"])
         self.assertLessEqual(active["essence_gain"], N.of(3))
