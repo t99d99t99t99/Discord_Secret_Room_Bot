@@ -177,9 +177,9 @@ class CommandTranslator(app_commands.Translator):
         },
         "Guided server setup.": {"ko": "안내형 서버 설정입니다."},
         "Operate imported notice queues.": {"ko": "공지 대기열을 운영합니다."},
-        "릴레이 이야기를 관리합니다.": {"en": "Manage relay stories."},
-        "Essence Foundry 게임을 관리합니다.": {
-            "en": "Manage the Essence Foundry game."
+        "Manage relay stories.": {"ko": "릴레이 이야기를 관리합니다."},
+        "Manage the Essence Foundry game.": {
+            "ko": "Essence Foundry 게임을 관리합니다."
         },
         "Inspect configuration and legacy migration state.": {
             "ko": "구성과 레거시 마이그레이션 상태를 확인합니다."
@@ -200,28 +200,28 @@ class CommandTranslator(app_commands.Translator):
         "Configure queue/story moderation authority.": {
             "ko": "공지/릴레이 검수 권한을 설정합니다."
         },
-        "게임 활성화 상태와 구성된 보상을 확인합니다.": {
-            "en": "View game enablement and configured rewards."
+        "View game enablement and configured rewards.": {
+            "ko": "게임 활성화 상태와 구성된 보상을 확인합니다."
         },
-        "이 서버의 게임을 활성화합니다.": {"en": "Enable this server's game."},
-        "이 서버의 게임을 비활성화합니다.": {"en": "Disable this server's game."},
-        "서버에서 표시할 게임 이름을 설정합니다.": {
-            "en": "Set the game name shown in this server."
+        "Enable this server's game.": {"ko": "이 서버의 게임을 활성화합니다."},
+        "Disable this server's game.": {"ko": "이 서버의 게임을 비활성화합니다."},
+        "Set the game name shown in this server.": {
+            "ko": "서버에서 표시할 게임 이름을 설정합니다."
         },
-        "공지 대기열 또는 릴레이 이야기의 보상 정책을 설정합니다.": {
-            "en": "Set the reward policy for a notice queue or relay story."
+        "Set the reward policy for a notice queue or relay story.": {
+            "ko": "공지 대기열 또는 릴레이 이야기의 보상 정책을 설정합니다."
         },
-        "지급 직전 스냅샷으로 플레이어 상태를 전체 되돌립니다.": {
-            "en": "Restore a player's entire state to the pre-reward snapshot."
+        "Restore a player's entire state to the pre-reward snapshot.": {
+            "ko": "지급 직전 스냅샷으로 플레이어 상태를 전체 되돌립니다."
         },
-        "지급·스냅샷·조정 상태를 검토합니다.": {
-            "en": "Review reward, snapshot, and reconciliation state."
+        "Review reward, snapshot, and reconciliation state.": {
+            "ko": "지급·스냅샷·조정 상태를 검토합니다."
         },
-        "삭제·부적격 기여의 보상 검토 대기 목록을 봅니다.": {
-            "en": "View pending reward reviews for deleted or disqualified contributions."
+        "View pending reward reviews for deleted or disqualified contributions.": {
+            "ko": "삭제·부적격 기여의 보상 검토 대기 목록을 봅니다."
         },
-        "외부/수동 보상 조정을 감사 기록으로 완료 처리합니다.": {
-            "en": "Record completion of an external or manual reward adjustment."
+        "Record completion of an external or manual reward adjustment.": {
+            "ko": "외부/수동 보상 조정을 감사 기록으로 완료 처리합니다."
         },
         "Create an active notice queue with safe defaults.": {
             "ko": "안전한 기본값으로 활성 공지 대기열을 만듭니다."
@@ -241,8 +241,8 @@ class CommandTranslator(app_commands.Translator):
         "Redirect submission/publication channels after confirmation.": {
             "ko": "확인 후 신청/게시 채널을 변경합니다."
         },
-        "신청 내용, 수정, 첨부파일, 링크 정책을 설정합니다.": {
-            "en": "Configure submission content, edits, attachments, and link policy."
+        "Configure submission content, edits, attachments, and link policy.": {
+            "ko": "신청 내용, 수정, 첨부파일, 링크 정책을 설정합니다."
         },
         "Pause a notice queue.": {"ko": "공지 대기열을 일시 정지합니다."},
         "Resume a paused notice queue.": {
@@ -261,61 +261,63 @@ class CommandTranslator(app_commands.Translator):
         "Reject or remove an eligible submission; moderators may use this.": {
             "ko": "적격 신청을 거절 또는 제거합니다. 검수자가 사용할 수 있습니다."
         },
-        "새 릴레이 이야기를 만듭니다.": {"en": "Create a new relay story."},
-        "이 서버의 릴레이 이야기를 표시합니다.": {
-            "en": "List this server's relay stories."
+        "Create a new relay story.": {"ko": "새 릴레이 이야기를 만듭니다."},
+        "List this server's relay stories.": {
+            "ko": "이 서버의 릴레이 이야기를 표시합니다."
         },
-        "릴레이 이야기 설정과 상태를 확인합니다.": {
-            "en": "View relay-story configuration and state."
+        "View relay-story configuration and state.": {
+            "ko": "릴레이 이야기 설정과 상태를 확인합니다."
         },
-        "릴레이 이야기 이름, 채널 또는 규칙을 변경합니다.": {
-            "en": "Edit a relay story's name, channel, or rules."
+        "Edit a relay story's name, channel, or rules.": {
+            "ko": "릴레이 이야기 이름, 채널 또는 규칙을 변경합니다."
         },
-        "관리자가 제공한 이야기 규칙을 채널에 고정합니다.": {
-            "en": "Pin administrator-supplied story rules in the channel."
+        "Pin administrator-supplied story rules in the channel.": {
+            "ko": "관리자가 제공한 이야기 규칙을 채널에 고정합니다."
         },
-        "기여 순서와 선택적 글자 수 제한을 설정합니다.": {
-            "en": "Configure contribution order and optional character limit."
+        "Configure contribution order and optional character limit.": {
+            "ko": "기여 순서와 선택적 글자 수 제한을 설정합니다."
         },
-        "이 이야기 전용 운영진 정책을 설정합니다.": {
-            "en": "Configure this story's dedicated moderator policy."
+        "Configure this story's dedicated moderator policy.": {
+            "ko": "이 이야기 전용 운영진 정책을 설정합니다."
         },
-        "릴레이 이야기를 일시 정지합니다.": {"en": "Pause a relay story."},
-        "릴레이 이야기를 다시 시작합니다.": {"en": "Resume a relay story."},
-        "릴레이 이야기를 보관 처리합니다. 기여 기록은 삭제하지 않습니다.": {
-            "en": "Archive a relay story without deleting contribution history."
+        "Pause a relay story.": {"ko": "릴레이 이야기를 일시 정지합니다."},
+        "Resume a relay story.": {"ko": "릴레이 이야기를 다시 시작합니다."},
+        "Archive a relay story without deleting contribution history.": {
+            "ko": "릴레이 이야기를 보관 처리합니다. 기여 기록은 삭제하지 않습니다."
         },
-        "릴레이 기여를 삭제하고 부적격 처리합니다.": {
-            "en": "Delete and disqualify a relay contribution."
+        "Delete and disqualify a relay contribution.": {
+            "ko": "릴레이 기여를 삭제하고 부적격 처리합니다."
         },
         "Look up an imported notice reward by submission message ID.": {
             "ko": "제출 메시지 ID로 가져온 공지 보상을 찾습니다."
         },
-        "가져온 공지 대기열과 릴레이 이야기 상태를 확인합니다.": {
-            "en": "Inspect imported notice-queue and relay-story state."
+        "Inspect imported notice-queue and relay-story state.": {
+            "ko": "가져온 공지 대기열과 릴레이 이야기 상태를 확인합니다."
         },
-        "이 서버의 증분 게임": {"en": "This server's incremental game"},
-        "이 서버의 게임 안내를 봅니다.": {"en": "View this server's game guide."},
-        "이 서버의 공지·릴레이 게임 보상을 확인합니다.": {
-            "en": "View this server's notice and relay game rewards."
+        "This server's incremental game": {"ko": "이 서버의 증분 게임"},
+        "View this server's game guide.": {"ko": "이 서버의 게임 안내를 봅니다."},
+        "View this server's notice and relay game rewards.": {
+            "ko": "이 서버의 공지·릴레이 게임 보상을 확인합니다."
         },
-        "게임 알림을 설정합니다.": {"en": "Configure game alerts."},
-        "현재 게임 현황을 봅니다.": {"en": "View current game status."},
-        "오늘의 비밀 유기체 생산을 실행합니다.": {
-            "en": "Run today's secret-organism production."
+        "Configure game alerts.": {"ko": "게임 알림을 설정합니다."},
+        "View current game status.": {"ko": "현재 게임 현황을 봅니다."},
+        "Run today's secret-organism production.": {
+            "ko": "오늘의 비밀 유기체 생산을 실행합니다."
         },
-        "비밀 파편으로 비밀을 합성합니다.": {
-            "en": "Synthesize secrets with secret shards."
+        "Synthesize secrets with secret shards.": {
+            "ko": "비밀 파편으로 비밀을 합성합니다."
         },
-        "현재 비밀 합성 가격을 확인합니다.": {
-            "en": "View current secret synthesis prices."
+        "View current secret synthesis prices.": {
+            "ko": "현재 비밀 합성 가격을 확인합니다."
         },
-        "우선순위에 따라 가능한 비밀을 최대 합성합니다.": {
-            "en": "Synthesize the maximum possible secrets in priority order."
+        "Synthesize the maximum possible secrets in priority order.": {
+            "ko": "우선순위에 따라 가능한 비밀을 최대 합성합니다."
         },
-        "초기화하고 이야기의 정수를 얻습니다.": {
-            "en": "Reset run resources and gain story essence."
+        "Reset run resources and gain story essence.": {
+            "ko": "초기화하고 이야기의 정수를 얻습니다."
         },
+        "Secret symbol or name": {"ko": "비밀 기호 또는 이름"},
+        "Amount to synthesize": {"ko": "합성할 수량"},
         "Disabled": {"ko": "비활성화"},
         "Manage Messages permission": {"ko": "메시지 관리 권한"},
         "One role": {"ko": "역할 하나"},

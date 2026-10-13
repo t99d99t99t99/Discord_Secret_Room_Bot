@@ -43,12 +43,12 @@ class Admin(commands.Cog):
     )
     relay = app_commands.Group(
         name=command_name("relay"),
-        description="릴레이 이야기를 관리합니다.",
+        description="Manage relay stories.",
         parent=admin,
     )
     game = app_commands.Group(
         name=command_name("game"),
-        description="Essence Foundry 게임을 관리합니다.",
+        description="Manage the Essence Foundry game.",
         parent=admin,
     )
     diagnostics = app_commands.Group(
@@ -640,7 +640,7 @@ class Admin(commands.Cog):
 
     @game.command(
         name=command_name("status"),
-        description="게임 활성화 상태와 구성된 보상을 확인합니다.",
+        description="View game enablement and configured rewards.",
     )
     async def game_status(self, interaction: discord.Interaction):
         assert interaction.guild is not None
@@ -690,7 +690,7 @@ class Admin(commands.Cog):
         )
 
     @game.command(
-        name=command_name("enable"), description="이 서버의 게임을 활성화합니다."
+        name=command_name("enable"), description="Enable this server's game."
     )
     async def game_enable(self, interaction: discord.Interaction):
         assert interaction.guild is not None
@@ -716,7 +716,7 @@ class Admin(commands.Cog):
         )
 
     @game.command(
-        name=command_name("disable"), description="이 서버의 게임을 비활성화합니다."
+        name=command_name("disable"), description="Disable this server's game."
     )
     async def game_disable(self, interaction: discord.Interaction):
         assert interaction.guild is not None
@@ -745,7 +745,7 @@ class Admin(commands.Cog):
 
     @game.command(
         name=command_name("set-name"),
-        description="서버에서 표시할 게임 이름을 설정합니다.",
+        description="Set the game name shown in this server.",
     )
     async def game_set_name(self, interaction: discord.Interaction, name: str):
         assert interaction.guild is not None
@@ -775,7 +775,7 @@ class Admin(commands.Cog):
 
     @game.command(
         name=command_name("reward-policy"),
-        description="공지 대기열 또는 릴레이 이야기의 보상 정책을 설정합니다.",
+        description="Set the reward policy for a notice queue or relay story.",
     )
     @app_commands.choices(
         target_type=[
@@ -846,7 +846,7 @@ class Admin(commands.Cog):
 
     @game.command(
         name=command_name("reward-rollback"),
-        description="지급 직전 스냅샷으로 플레이어 상태를 전체 되돌립니다.",
+        description="Restore a player's entire state to the pre-reward snapshot.",
     )
     async def game_reward_rollback(
         self, interaction: discord.Interaction, ledger_id: int
@@ -896,7 +896,7 @@ class Admin(commands.Cog):
 
     @game.command(
         name=command_name("reward-review"),
-        description="지급·스냅샷·조정 상태를 검토합니다.",
+        description="Review reward, snapshot, and reconciliation state.",
     )
     async def game_reward_review(
         self, interaction: discord.Interaction, ledger_id: int
@@ -959,7 +959,7 @@ class Admin(commands.Cog):
 
     @game.command(
         name=command_name("reward-reconciliations"),
-        description="삭제·부적격 기여의 보상 검토 대기 목록을 봅니다.",
+        description="View pending reward reviews for deleted or disqualified contributions.",
     )
     async def game_reward_reconciliations(self, interaction: discord.Interaction):
         assert interaction.guild is not None
@@ -1012,7 +1012,7 @@ class Admin(commands.Cog):
 
     @game.command(
         name=command_name("resolve-reconciliation"),
-        description="외부/수동 보상 조정을 감사 기록으로 완료 처리합니다.",
+        description="Record completion of an external or manual reward adjustment.",
     )
     async def game_resolve_reconciliation(
         self, interaction: discord.Interaction, case_id: int, note: str
@@ -1602,7 +1602,7 @@ class Admin(commands.Cog):
 
     @queue.command(
         name=command_name("configure-submissions"),
-        description="신청 내용, 수정, 첨부파일, 링크 정책을 설정합니다.",
+        description="Configure submission content, edits, attachments, and link policy.",
     )
     @app_commands.choices(
         no_entry_action=[
@@ -2002,7 +2002,7 @@ class Admin(commands.Cog):
         return story
 
     @relay.command(
-        name=command_name("create"), description="새 릴레이 이야기를 만듭니다."
+        name=command_name("create"), description="Create a new relay story."
     )
     async def relay_create(
         self,
@@ -2051,7 +2051,7 @@ class Admin(commands.Cog):
         )
 
     @relay.command(
-        name=command_name("list"), description="이 서버의 릴레이 이야기를 표시합니다."
+        name=command_name("list"), description="List this server's relay stories."
     )
     async def relay_list(self, interaction: discord.Interaction):
         assert interaction.guild is not None
@@ -2078,7 +2078,7 @@ class Admin(commands.Cog):
         await interaction.response.send_message(rendered, ephemeral=True)
 
     @relay.command(
-        name=command_name("view"), description="릴레이 이야기 설정과 상태를 확인합니다."
+        name=command_name("view"), description="View relay-story configuration and state."
     )
     async def relay_view(self, interaction: discord.Interaction, story_id: int):
         assert interaction.guild is not None
@@ -2124,7 +2124,7 @@ class Admin(commands.Cog):
 
     @relay.command(
         name=command_name("edit"),
-        description="릴레이 이야기 이름, 채널 또는 규칙을 변경합니다.",
+        description="Edit a relay story's name, channel, or rules.",
     )
     async def relay_edit(
         self,
@@ -2200,7 +2200,7 @@ class Admin(commands.Cog):
 
     @relay.command(
         name=command_name("pin-rules"),
-        description="관리자가 제공한 이야기 규칙을 채널에 고정합니다.",
+        description="Pin administrator-supplied story rules in the channel.",
     )
     async def relay_pin_rules(self, interaction: discord.Interaction, story_id: int):
         assert interaction.guild is not None
@@ -2231,7 +2231,7 @@ class Admin(commands.Cog):
 
     @relay.command(
         name=command_name("configure-posting"),
-        description="기여 순서와 선택적 글자 수 제한을 설정합니다.",
+        description="Configure contribution order and optional character limit.",
     )
     async def relay_configure_posting(
         self,
@@ -2284,7 +2284,7 @@ class Admin(commands.Cog):
 
     @relay.command(
         name=command_name("set-moderators"),
-        description="이 이야기 전용 운영진 정책을 설정합니다.",
+        description="Configure this story's dedicated moderator policy.",
     )
     @app_commands.choices(
         policy=[
@@ -2343,7 +2343,7 @@ class Admin(commands.Cog):
         )
 
     @relay.command(
-        name=command_name("pause"), description="릴레이 이야기를 일시 정지합니다."
+        name=command_name("pause"), description="Pause a relay story."
     )
     async def relay_pause(self, interaction: discord.Interaction, story_id: int):
         assert interaction.guild is not None
@@ -2368,7 +2368,7 @@ class Admin(commands.Cog):
         )
 
     @relay.command(
-        name=command_name("resume"), description="릴레이 이야기를 다시 시작합니다."
+        name=command_name("resume"), description="Resume a relay story."
     )
     async def relay_resume(self, interaction: discord.Interaction, story_id: int):
         assert interaction.guild is not None
@@ -2398,7 +2398,7 @@ class Admin(commands.Cog):
 
     @relay.command(
         name=command_name("remove"),
-        description="릴레이 이야기를 보관 처리합니다. 기여 기록은 삭제하지 않습니다.",
+        description="Archive a relay story without deleting contribution history.",
     )
     async def relay_remove(self, interaction: discord.Interaction, story_id: int):
         assert interaction.guild is not None
@@ -2433,7 +2433,7 @@ class Admin(commands.Cog):
 
     @relay.command(
         name=command_name("moderate"),
-        description="릴레이 기여를 삭제하고 부적격 처리합니다.",
+        description="Delete and disqualify a relay contribution.",
     )
     async def relay_moderate(
         self,
@@ -2525,7 +2525,7 @@ class Admin(commands.Cog):
 
     @diagnostics.command(
         name=command_name("migration"),
-        description="가져온 공지 대기열과 릴레이 이야기 상태를 확인합니다.",
+        description="Inspect imported notice-queue and relay-story state.",
     )
     async def migration_diagnostic(self, interaction: discord.Interaction):
         assert interaction.guild is not None

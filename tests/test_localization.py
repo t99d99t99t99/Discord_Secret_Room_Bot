@@ -40,8 +40,8 @@ class LocalizationTests(unittest.TestCase):
             translator._copy["Configure and operate CommunityNoticeBot."]["ko"],
         )
         self.assertEqual(
-            "Manage relay stories.",
-            translator._copy["릴레이 이야기를 관리합니다."]["en"],
+            "릴레이 이야기를 관리합니다.",
+            translator._copy["Manage relay stories."]["ko"],
         )
 
     def test_command_names_use_discord_locale_strings(self):
@@ -58,19 +58,27 @@ class LocalizationTests(unittest.TestCase):
 
     def test_all_registered_command_descriptions_have_the_other_locale(self):
         """Discord metadata is separate from runtime messages and needs its own catalog."""
-        description = re.compile(r'description="([^"]+)"')
-        korean = re.compile(r"[가-힣]")
+        description = re.compile(r'(?:description|secret|amount)="([^"]+)"')
         descriptions = []
         for source in (
             ROOT / "cogs/admin.py",
             ROOT / "cogs/secretae_incremental/game.py",
         ):
-            descriptions.extend(description.findall(source.read_text()))
+            source_text = source.read_text()
+            source_descriptions = description.findall(source_text)
+            descriptions.extend(source_descriptions)
+            self.assertFalse(
+                any(
+                    "\uac00" <= character <= "\ud7a3"
+                    for value in source_descriptions
+                    for character in value
+                ),
+                "Command descriptions must use English source text.",
+            )
         for value in descriptions:
             with self.subTest(description=value):
-                locale = "en" if korean.search(value) else "ko"
                 self.assertIn(value, CommandTranslator._copy)
-                self.assertIn(locale, CommandTranslator._copy[value])
+                self.assertIn("ko", CommandTranslator._copy[value])
 
     def test_game_result_table_uses_selected_locale(self):
         table = _amount_table([("★", N.of(3), N.of(1), N.of(2))], "Production", "en")
