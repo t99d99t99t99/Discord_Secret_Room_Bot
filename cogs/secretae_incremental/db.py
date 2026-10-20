@@ -9,8 +9,19 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from .constants import *
-from .numbers import LayeredDecimal as N, maximum
+
+from cogs.secretae_incremental.constants import (
+    COLORS,
+    CIRCLE,
+    HEART,
+    MAX_SYNTHESIS_ORDER,
+    PRODUCTION_DIVISOR,
+    PRODUCTION_ORDER,
+    RED,
+    SECRETS,
+    SQUARE,
+)
+from cogs.secretae_incremental.numbers import LayeredDecimal as N, maximum
 
 ZERO, ONE = N.of(0), N.of(1)
 MILKY_WAY_BASE = N.of("0.2")
@@ -272,7 +283,14 @@ def max_synthesis_step(state):
         # purchase changes later prices and budgets, so recalculate per secret.
         lower, upper = ZERO, ONE
         while state["shards"] >= quote_synthesis(state, key, upper):
-            lower, upper = upper, upper * N.of(2)
+            doubled = upper * N.of(2)
+            # At extreme layers, multiplying can round back to the same value.
+            # The current upper bound is still affordable, so retain it and
+            # stop instead of repeating the same quote forever.
+            if doubled <= upper:
+                lower = upper
+                break
+            lower, upper = upper, doubled
         while True:
             try:
                 if upper - lower <= ONE:
@@ -280,6 +298,12 @@ def max_synthesis_step(state):
             except ValueError:
                 break
             midpoint = ((lower + upper) / N.of(2)).floor()
+            # LayeredDecimal has finite precision. Once the interval is
+            # smaller than one representable step at this magnitude, midpoint
+            # rounds to a bound and another iteration cannot improve the
+            # affordable lower bound.
+            if midpoint <= lower or midpoint >= upper:
+                break
             if state["shards"] >= quote_synthesis(state, key, midpoint):
                 lower = midpoint
             else:

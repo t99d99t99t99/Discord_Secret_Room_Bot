@@ -109,6 +109,31 @@ class GameBalanceTests(unittest.TestCase):
         result = max_synthesis_step(state)
         self.assertTrue(any(gain.sign for _, gain in result["secrets"].values()))
 
+    def test_max_synthesis_finishes_at_layer_two_balances(self):
+        state = fresh_state()
+        state["shards"] = N(1, "2", N.of("45.23").mag)
+        displayed_secrets = {
+            "RED": "3e43",
+            "ORANGE": "3e43",
+            "YELLOW": "7e43",
+            "GREEN": "1e44",
+            "BLUE": "3e44",
+            "PURPLE": "6e44",
+            "WHITE": "1e45",
+            "BLACK": "2e45",
+            "CIRCLE": "1e46",
+            "SQUARE": "9e45",
+            "HEART": "4e45",
+        }
+        state["secrets"] = {
+            key: N.of(amount) for key, amount in displayed_secrets.items()
+        }
+
+        result = max_synthesis_step(state)
+
+        self.assertTrue(any(gain.sign for _, gain in result["secrets"].values()))
+        self.assertGreaterEqual(state["shards"], N.of(0))
+
     def test_small_and_active_server_production_rewards_do_not_replace_first_loop(self):
         policy = {"type": "production_multiplier", "amount": "1.1"}
         small = seven_day_route(fresh_state(), rewards_by_day={1: [policy]})
