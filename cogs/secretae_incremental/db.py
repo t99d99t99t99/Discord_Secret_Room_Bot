@@ -6,6 +6,7 @@ the transaction functions centralize locking and durable persistence here.
 """
 
 from __future__ import annotations
+import asyncio
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from .constants import *
@@ -387,7 +388,12 @@ async def max_synthesize(pool, guild_id, discord_id):
     async with pool.acquire() as conn:
         async with conn.transaction():
             state = await _state(conn, guild_id, discord_id)
-            summary = max_synthesis_step(state)
+            # Keep the row locks and transaction open while pricing, so two
+            # simultaneous purchases cannot spend the same shard balance. The
+            # search is pure CPU work, though, and large layered values can
+            # make its Decimal logarithms take seconds; run it off-loop so
+            # Discord heartbeats and other interactions remain responsive.
+            summary = await asyncio.to_thread(max_synthesis_step, state)
             if not any(gain.sign for _, gain in summary["secrets"].values()):
                 raise ValueError("합성할 비밀 파편이 부족합니다.")
 
