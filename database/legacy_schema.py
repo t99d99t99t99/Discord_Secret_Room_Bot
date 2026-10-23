@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 async def initialize_legacy_schema(conn) -> None:
+    """Create and seed tables retained for legacy submission and game flows."""
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS kyohoon_submissions (
             id           SERIAL PRIMARY KEY,

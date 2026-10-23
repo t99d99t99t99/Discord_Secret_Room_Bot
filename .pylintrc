@@ -1,0 +1,7 @@
+[MASTER]
+init-hook=import sys; sys.path.insert(0, '.')
+persistent=no
+
+[FORMAT]
+max-line-length=185
+module-rgx=(([a-z_][a-z0-9_]*)|SecretRoomBot)

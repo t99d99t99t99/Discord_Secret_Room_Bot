@@ -1,3 +1,5 @@
+"""Start the SecretRoom Discord bot."""
+
 import asyncio
 import logging
 import os

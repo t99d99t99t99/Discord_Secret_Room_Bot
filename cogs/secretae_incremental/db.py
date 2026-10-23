@@ -198,8 +198,8 @@ async def due_alert_players(pool, guild_id, hour, is_concentration_deadline, now
     current_week = concentration_week_start(now)
     return await pool.fetch(
         "SELECT settings.discord_id, settings.alert_type, "
-        "players.last_concentrated_week_start IS DISTINCT FROM $2 AS needs_concentration, "
-        "players.last_game_command_game_date IS DISTINCT FROM $3 AS needs_game "
+        "players.last_concentrated_week_start IS DISTINCT FROM $3 AS needs_concentration, "
+        "players.last_game_command_game_date IS DISTINCT FROM $4 AS needs_game "
         "FROM guild_game_alert_settings AS settings "
         "JOIN guild_game_players AS players ON players.guild_id=settings.guild_id AND players.discord_id=settings.discord_id "
         "WHERE settings.guild_id=$1 AND settings.alert_hour=$2 AND ("

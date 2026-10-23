@@ -7,8 +7,8 @@ import os
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from .constants import *
-from .db import (
+from cogs.secretae_incremental.constants import *
+from cogs.secretae_incremental.db import (
     concentrate,
     concentration_available,
     concentration_gain,

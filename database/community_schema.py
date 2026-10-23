@@ -12,6 +12,7 @@ async def initialize_community_schema(conn) -> None:
 
 
 async def initialize_guild_game_schema(conn) -> None:
+    """Create guild configuration and shared game state tables."""
     # Additive configuration foundation. Legacy tables remain intact while
     # existing servers complete their migration.
     await conn.execute("""
@@ -145,6 +146,7 @@ async def initialize_guild_game_schema(conn) -> None:
 
 
 async def initialize_audit_and_rewards_schema(conn) -> None:
+    """Create audit history and reward reconciliation tables."""
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS admin_audit_log (
             id BIGSERIAL PRIMARY KEY,
@@ -184,6 +186,7 @@ async def initialize_audit_and_rewards_schema(conn) -> None:
 
 
 async def initialize_notice_schema(conn) -> None:
+    """Create notice queue, submission, and scheduled job tables."""
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS notice_queues (
             id BIGSERIAL PRIMARY KEY,
@@ -315,6 +318,7 @@ async def initialize_notice_schema(conn) -> None:
 
 
 async def initialize_relay_schema(conn) -> None:
+    """Create relay story and contribution tables."""
     await conn.execute("""
         CREATE TABLE IF NOT EXISTS relay_stories (
             id BIGSERIAL PRIMARY KEY,
