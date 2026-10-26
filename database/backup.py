@@ -26,7 +26,7 @@ def _run(command: list[str]) -> None:
         subprocess.run(command, check=True)
     except FileNotFoundError as error:
         raise RuntimeError(
-            f"{command[0]} was not found; install PostgreSQL client tools."
+            f"{command[0]} was not found; install PostgreSQL client tools in the environment running this command."
         ) from error
     except subprocess.CalledProcessError as error:
         raise RuntimeError(

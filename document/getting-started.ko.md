@@ -65,8 +65,37 @@ CommunityNoticeBot은 구성원이 제출한 글을 정해진 시간에 게시�
 
 저장소 CLI로 PostgreSQL 백업을 만들고 복원할 수 있습니다. 명령을 실행하는
 컴퓨터에 PostgreSQL 클라이언트 도구(`pg_dump`, `pg_restore`)를 설치합니다.
+이 도구는 `requirements.txt`에 포함되지 않는 운영체제 패키지입니다. 저장소의
+Dockerfile은 컨테이너 실행에 필요한 도구를 설치합니다. 직접 설치할 때는
+운영체제 패키지 관리자를 사용합니다. Debian 또는 Ubuntu에서는 다음과 같이
+설치할 수 있습니다.
+
+```sh
+sudo apt-get update
+sudo apt-get install postgresql-client
+```
+
+Homebrew를 사용하는 macOS에서는 `libpq`를 설치하고 실행 경로에 추가합니다.
+
+```sh
+brew install libpq
+export PATH="$(brew --prefix libpq)/bin:$PATH"
+```
+
+Railpack으로 Railway에 배포한다면 서비스 변수 `RAILPACK_DEPLOY_APT_PACKAGES`에
+`postgresql-client`를 설정한 뒤 다시 배포합니다.
+
+PostgreSQL 클라이언트는 서버와 같은 주 버전이거나 더 높은 버전을 사용하세요.
 기본 백업은 `backups/` 아래 압축 사용자 지정 형식으로 저장됩니다. 이 폴더는
 커뮤니티의 비공개 데이터가 포함될 수 있어 Git에서 제외됩니다.
+
+저장소 Dockerfile로 봇을 실행하려면 이미지를 만들고 환경 파일로 배포 비밀값을
+전달합니다. `.dockerignore`가 환경 파일을 이미지에 포함하지 않도록 합니다.
+
+```sh
+docker build -t secretroombot .
+docker run --env-file .env secretroombot
+```
 
 ```sh
 python3 -m database.backup backup

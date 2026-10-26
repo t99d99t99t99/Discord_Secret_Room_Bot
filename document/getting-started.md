@@ -70,9 +70,39 @@ before cutover.
 
 Create and restore PostgreSQL backups with the repository CLI below. Install the
 PostgreSQL client tools (`pg_dump` and `pg_restore`) on the machine that runs the
-commands. The default backup is a compressed custom-format archive under
+commands; these are operating-system packages and are not installed by
+`requirements.txt`. The included Dockerfile installs them for container runs.
+For direct installs, use the package manager for your operating system. For
+example, on Debian or Ubuntu:
+
+```sh
+sudo apt-get update
+sudo apt-get install postgresql-client
+```
+
+On macOS with Homebrew, install `libpq` and add its tools to `PATH`:
+
+```sh
+brew install libpq
+export PATH="$(brew --prefix libpq)/bin:$PATH"
+```
+
+For Railway deployments using Railpack, set the service variable
+`RAILPACK_DEPLOY_APT_PACKAGES` to `postgresql-client`, then redeploy.
+
+Use a PostgreSQL client version that is the same major version as, or newer
+than, the server. The default backup is a compressed custom-format archive under
 `backups/`; that directory is excluded from Git because archives contain private
 community data.
+
+To run the bot in the included container, build the image and pass deployment
+secrets through an environment file (which `.dockerignore` keeps out of the
+image):
+
+```sh
+docker build -t secretroombot .
+docker run --env-file .env secretroombot
+```
 
 ```sh
 python3 -m database.backup backup
