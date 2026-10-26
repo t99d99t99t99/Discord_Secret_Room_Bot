@@ -68,6 +68,35 @@ before cutover.
 
 ## Upgrades, disabling, and removal
 
+Create and restore PostgreSQL backups with the repository CLI below. Install the
+PostgreSQL client tools (`pg_dump` and `pg_restore`) on the machine that runs the
+commands. The default backup is a compressed custom-format archive under
+`backups/`; that directory is excluded from Git because archives contain private
+community data.
+
+```sh
+python3 -m database.backup backup
+python3 -m database.backup backup --output /secure/path/community.dump
+python3 -m database.backup restore /secure/path/community.dump
+# Configure this command in cron or your hosting scheduler for local archives.
+python3 -m database.backup scheduled
+```
+
+The CLI reads `DATABASE_URL` from the environment or `.env`; `--database-url`
+can select another target. Restore prompts before changing the database. Add
+`--clean` to drop objects included in the archive before restoring, and use
+`--yes` only for a deliberate, automated restore. Stop the bot before restoring
+so it cannot write while recovery is in progress. Keep backups encrypted and
+off the application host, and periodically rehearse restoring one into a
+separate PostgreSQL database.
+
+For audit-channel delivery, use `/backup upload` for a one-time archive. A
+server administrator can configure `/backup schedule` with daily or weekly
+frequency, `HH:MM`, an IANA timezone, and (for weekly schedules) weekday `0`
+(Monday) through `6` (Sunday). `/backup disable` stops that server's schedule.
+These upload schedules run in the bot; `database.backup scheduled` is for a
+host-level scheduler that should keep a separate local archive.
+
 Take a database backup before upgrading. Deploy the new application version,
 run it once so additive schema migrations finish, and check `/admin diagnostics
 migration` and `/admin setup status` before enabling changed schedules.

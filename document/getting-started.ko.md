@@ -63,6 +63,32 @@ CommunityNoticeBot은 구성원이 제출한 글을 정해진 시간에 게시�
 
 ## 업그레이드, 비활성화, 제거
 
+저장소 CLI로 PostgreSQL 백업을 만들고 복원할 수 있습니다. 명령을 실행하는
+컴퓨터에 PostgreSQL 클라이언트 도구(`pg_dump`, `pg_restore`)를 설치합니다.
+기본 백업은 `backups/` 아래 압축 사용자 지정 형식으로 저장됩니다. 이 폴더는
+커뮤니티의 비공개 데이터가 포함될 수 있어 Git에서 제외됩니다.
+
+```sh
+python3 -m database.backup backup
+python3 -m database.backup backup --output /secure/path/community.dump
+python3 -m database.backup restore /secure/path/community.dump
+# 로컬 아카이브는 cron 또는 호스팅 스케줄러에서 실행합니다.
+python3 -m database.backup scheduled
+```
+
+CLI는 환경 변수 또는 `.env`의 `DATABASE_URL`을 사용하며, `--database-url`로
+대상을 지정할 수도 있습니다. 복원은 데이터베이스를 변경하기 전에 확인을
+요청합니다. 아카이브에 포함된 객체를 먼저 삭제하려면 `--clean`을 추가하고,
+자동화 복원에서만 명시적으로 `--yes`를 사용합니다. 복원 중 데이터 변경을
+막도록 봇을 먼저 중지하세요. 백업은 암호화해 애플리케이션 호스트 외부에
+보관하고, 별도의 PostgreSQL 데이터베이스에 주기적으로 복원해 확인하세요.
+
+감사 채널로 한 번 업로드하려면 `/backup upload`를 사용합니다. 서버 관리자는
+`/backup schedule`에서 일간 또는 주간 주기, `HH:MM`, IANA 시간대와 주간 일정의
+요일(`0` 월요일부터 `6` 일요일)을 지정할 수 있습니다. `/backup disable`은 해당
+서버의 일정을 중지합니다. 업로드 일정은 봇에서 실행하고,
+`database.backup scheduled`는 호스트 스케줄러에서 별도 로컬 아카이브를 만들 때 사용합니다.
+
 업그레이드 전에는 데이터베이스를 백업합니다. 업데이트 후 봇을 한 번 실행하여 스키마 마이그레이션을 적용하고,
 `/관리 진단 마이그레이션` 및 `/관리 설정 현황`를 확인합니다. 대기열·릴레이는 각 수명주기 명령으로
 비활성화 또는 보관할 수 있으며 기록은 유지됩니다. `/관리 게임 비활성화`은 게임 진행도를 지우지 않고 새 게임 명령과

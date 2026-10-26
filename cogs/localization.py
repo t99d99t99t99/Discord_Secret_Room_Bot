@@ -131,6 +131,13 @@ class CommandTranslator(app_commands.Translator):
         "relay": {"ko": "릴레이"},
         "game": {"ko": "게임"},
         "diagnostics": {"ko": "진단"},
+        "backup": {"ko": "백업"},
+        "upload": {"ko": "업로드"},
+        "schedule": {"ko": "일정설정"},
+        "rate": {"ko": "주기"},
+        "time": {"ko": "시각"},
+        "timezone": {"ko": "시간대"},
+        "weekday": {"ko": "요일"},
         "start": {"ko": "시작"},
         "status": {"ko": "현황"},
         "set-language": {"ko": "언어설정"},
@@ -183,6 +190,21 @@ class CommandTranslator(app_commands.Translator):
         },
         "Inspect configuration and legacy migration state.": {
             "ko": "구성과 레거시 마이그레이션 상태를 확인합니다."
+        },
+        "Back up this bot database.": {"ko": "봇 데이터베이스를 백업합니다."},
+        "Create and upload a backup to the audit channel.": {
+            "ko": "백업 파일을 만들어 감사 채널에 업로드합니다."
+        },
+        "Set a daily or weekly audit-channel backup.": {
+            "ko": "감사 채널에 업로드할 일간 또는 주간 백업을 설정합니다."
+        },
+        "Disable scheduled database backups for this server.": {
+            "ko": "이 서버의 예약 데이터베이스 백업을 중지합니다."
+        },
+        "Local time in HH:MM format": {"ko": "현지 시각(HH:MM 형식)"},
+        "IANA timezone, such as Asia/Seoul": {"ko": "Asia/Seoul과 같은 IANA 시간대"},
+        "For weekly schedules: 0=Monday through 6=Sunday": {
+            "ko": "주간 일정의 요일: 0=월요일부터 6=일요일"
         },
         "Start or resume guided setup.": {
             "ko": "안내형 설정을 시작하거나 다시 엽니다."

@@ -33,6 +33,16 @@ state or infer operational intent from database queries and Discord API calls.
 - Do not add comments for self-evident assignments or syntax.  If every line
   needs narration, extract a well-named helper instead.
 
+## Bot localization
+- Keep every user-facing bot message available in both English and Korean.
+  Add or update matching keys in `messages/en.yml` and `messages/ko.yml`, and
+  keep their formatting placeholders identical.
+- Route runtime replies through `cogs/localization.py` rather than embedding
+  English copy in cogs. Translate Discord command names, descriptions, option
+  names, and choice labels through `CommandTranslator` as well.
+- Run the localization checks in `tests/test_localization.py` after changing
+  bot messages or command metadata.
+
 ## Change discipline
 - Keep functions small enough to scan.  Extract a helper once nested branches,
   repeated policy checks, or more than one independent responsibility obscure

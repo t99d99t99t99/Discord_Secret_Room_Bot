@@ -9,6 +9,33 @@ async def initialize_community_schema(conn) -> None:
     await initialize_audit_and_rewards_schema(conn)
     await initialize_notice_schema(conn)
     await initialize_relay_schema(conn)
+    await initialize_backup_schema(conn)
+
+
+async def initialize_backup_schema(conn) -> None:
+    """Create durable per-guild backup schedules and run idempotency records."""
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS backup_schedules (
+            guild_id BIGINT PRIMARY KEY,
+            cadence TEXT NOT NULL CHECK (cadence IN ('daily', 'weekly')),
+            schedule_time TIME NOT NULL,
+            schedule_weekday SMALLINT CHECK (schedule_weekday BETWEEN 0 AND 6),
+            timezone TEXT NOT NULL DEFAULT 'UTC',
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CHECK ((cadence = 'weekly') = (schedule_weekday IS NOT NULL))
+        )
+    """)
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS backup_jobs (
+            guild_id BIGINT NOT NULL,
+            scheduled_for TIMESTAMPTZ NOT NULL,
+            state TEXT NOT NULL CHECK (state IN ('running', 'completed', 'failed')),
+            finished_at TIMESTAMPTZ,
+            last_error TEXT,
+            PRIMARY KEY (guild_id, scheduled_for)
+        )
+    """)
 
 
 async def initialize_guild_game_schema(conn) -> None:

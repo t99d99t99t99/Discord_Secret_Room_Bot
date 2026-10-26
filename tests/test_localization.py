@@ -50,6 +50,7 @@ class LocalizationTests(unittest.TestCase):
         for source in (
             ROOT / "cogs/admin.py",
             ROOT / "cogs/secretae_incremental/game.py",
+            ROOT / "cogs/backups.py",
         ):
             for name in command_names.findall(source.read_text()):
                 with self.subTest(name=name):
@@ -63,6 +64,7 @@ class LocalizationTests(unittest.TestCase):
         for source in (
             ROOT / "cogs/admin.py",
             ROOT / "cogs/secretae_incremental/game.py",
+            ROOT / "cogs/backups.py",
         ):
             source_text = source.read_text()
             source_descriptions = description.findall(source_text)

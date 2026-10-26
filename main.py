@@ -35,6 +35,7 @@ async def main():
     # Load dependency-light cogs before feature cogs that call their services.
     await bot.load_extension("cogs.general")
     await bot.load_extension("cogs.admin")
+    await bot.load_extension("cogs.backups")
     await bot.load_extension("cogs.notice_queues")
     await bot.load_extension("cogs.relay_stories")
     await bot.load_extension("cogs.secretae_incremental.game")
