@@ -71,8 +71,10 @@ Dockerfile은 컨테이너 실행에 필요한 도구를 설치합니다. 직접
 설치할 수 있습니다.
 
 ```sh
+sudo apt-get install --yes postgresql-common ca-certificates
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
 sudo apt-get update
-sudo apt-get install postgresql-client
+sudo apt-get install postgresql-client-18
 ```
 
 Homebrew를 사용하는 macOS에서는 `libpq`를 설치하고 실행 경로에 추가합니다.
@@ -82,8 +84,8 @@ brew install libpq
 export PATH="$(brew --prefix libpq)/bin:$PATH"
 ```
 
-Railpack으로 Railway에 배포한다면 서비스 변수 `RAILPACK_DEPLOY_APT_PACKAGES`에
-`postgresql-client`를 설정한 뒤 다시 배포합니다.
+Railway에서는 저장소 Dockerfile로 배포해 PostgreSQL 18 클라이언트를 설치하세요.
+Debian 기본 `postgresql-client` 패키지는 데이터베이스 서버보다 낮은 버전일 수 있습니다.
 
 PostgreSQL 클라이언트는 서버와 같은 주 버전이거나 더 높은 버전을 사용하세요.
 기본 백업은 `backups/` 아래 압축 사용자 지정 형식으로 저장됩니다. 이 폴더는

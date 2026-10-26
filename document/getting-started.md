@@ -76,8 +76,10 @@ For direct installs, use the package manager for your operating system. For
 example, on Debian or Ubuntu:
 
 ```sh
+sudo apt-get install --yes postgresql-common ca-certificates
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
 sudo apt-get update
-sudo apt-get install postgresql-client
+sudo apt-get install postgresql-client-18
 ```
 
 On macOS with Homebrew, install `libpq` and add its tools to `PATH`:
@@ -87,8 +89,9 @@ brew install libpq
 export PATH="$(brew --prefix libpq)/bin:$PATH"
 ```
 
-For Railway deployments using Railpack, set the service variable
-`RAILPACK_DEPLOY_APT_PACKAGES` to `postgresql-client`, then redeploy.
+For Railway, deploy with the included Dockerfile so PostgreSQL 18's client is
+installed. Debian's default `postgresql-client` package can be older than the
+database server.
 
 Use a PostgreSQL client version that is the same major version as, or newer
 than, the server. The default backup is a compressed custom-format archive under

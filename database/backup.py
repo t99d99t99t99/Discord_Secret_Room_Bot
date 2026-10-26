@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+from glob import glob
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from dotenv import load_dotenv
 
@@ -20,18 +23,80 @@ def _database_url(value: str | None) -> str:
     return database_url
 
 
-def _run(command: list[str]) -> None:
+def _client_environment(database_url: str) -> dict[str, str]:
+    """Translate a PostgreSQL URL into libpq environment variables.
+
+    Keeping credentials out of command arguments prevents process listings and
+    exception tracebacks from exposing the database password.
+    """
+    parsed = urlsplit(database_url)
+    if parsed.scheme not in {"postgres", "postgresql"}:
+        raise ValueError("DATABASE_URL must be a PostgreSQL connection URL.")
+    if not parsed.hostname or not parsed.path.strip("/"):
+        raise ValueError("DATABASE_URL must include a host and database name.")
+
+    environment = os.environ.copy()
+    # Avoid forwarding the original credential-bearing URI to the client.
+    environment.pop("DATABASE_URL", None)
+    environment.update(
+        {
+            "PGHOST": unquote(parsed.hostname),
+            "PGPORT": str(parsed.port or 5432),
+            "PGDATABASE": unquote(parsed.path.lstrip("/")),
+        }
+    )
+    if parsed.username is not None:
+        environment["PGUSER"] = unquote(parsed.username)
+    if parsed.password is not None:
+        environment["PGPASSWORD"] = unquote(parsed.password)
+
+    # These are the libpq settings commonly supplied in hosted database URLs.
+    query_environment_names = {
+        "sslmode": "PGSSLMODE",
+        "sslrootcert": "PGSSLROOTCERT",
+        "sslcert": "PGSSLCERT",
+        "sslkey": "PGSSLKEY",
+        "application_name": "PGAPPNAME",
+        "connect_timeout": "PGCONNECT_TIMEOUT",
+        "channel_binding": "PGCHANNELBINDING",
+        "gssencmode": "PGGSSENCMODE",
+        "options": "PGOPTIONS",
+        "target_session_attrs": "PGTARGETSESSIONATTRS",
+    }
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        environment_name = query_environment_names.get(key)
+        if environment_name:
+            environment[environment_name] = value
+    return environment
+
+
+def _client_executable(name: str) -> str:
+    """Prefer the newest versioned Debian client, then use the system PATH."""
+    versioned_candidates = glob(f"/usr/lib/postgresql/*/bin/{name}")
+    if versioned_candidates:
+        return max(
+            versioned_candidates,
+            key=lambda path: tuple(
+                int(part) for part in Path(path).parts[-3].split(".")
+            ),
+        )
+    return shutil.which(name) or name
+
+
+def _run(command: list[str], *, environment: dict[str, str] | None = None) -> None:
     """Run a PostgreSQL client command and report missing tools clearly."""
     try:
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True, env=environment)
     except FileNotFoundError as error:
         raise RuntimeError(
             f"{command[0]} was not found; install PostgreSQL client tools in the environment running this command."
         ) from error
     except subprocess.CalledProcessError as error:
+        # Suppress CalledProcessError context: process arguments can contain
+        # secrets when callers provide connection details.
         raise RuntimeError(
-            f"{command[0]} failed with exit code {error.returncode}."
-        ) from error
+            f"{Path(command[0]).name} failed with exit code {error.returncode}."
+        ) from None
 
 
 def create_backup(database_url: str, destination: Path) -> Path:
@@ -41,15 +106,14 @@ def create_backup(database_url: str, destination: Path) -> Path:
     try:
         _run(
             [
-                "pg_dump",
+                _client_executable("pg_dump"),
                 "--format=custom",
                 "--no-owner",
                 "--no-acl",
                 "--file",
                 str(temporary_path),
-                "--dbname",
-                database_url,
-            ]
+            ],
+            environment=_client_environment(database_url),
         )
         # Archives contain private community records, so restrict local access.
         temporary_path.chmod(0o600)
@@ -67,7 +131,8 @@ def restore_backup(
         raise ValueError(f"Backup archive does not exist: {archive}")
 
     # Ask pg_restore to parse the archive before making any database changes.
-    _run(["pg_restore", "--list", str(archive)])
+    pg_restore = _client_executable("pg_restore")
+    _run([pg_restore, "--list", str(archive)])
     if not assume_yes:
         answer = input(
             f"Restore {archive} into the configured database? This changes live data. [y/N] "
@@ -77,18 +142,16 @@ def restore_backup(
             return
 
     command = [
-        "pg_restore",
+        pg_restore,
         "--single-transaction",
         "--no-owner",
         "--no-acl",
-        "--dbname",
-        database_url,
     ]
     if clean:
         # This removes objects represented by the archive before recreating them.
         command.extend(["--clean", "--if-exists"])
     command.append(str(archive))
-    _run(command)
+    _run(command, environment=_client_environment(database_url))
 
 
 def _default_backup_path() -> Path:
